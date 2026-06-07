@@ -22,7 +22,7 @@
 #define PANEL_HEIGHT    64      // Panel height (32 or 64)
 #define PANEL_CHAIN     1       // Number of chained panels
 #define COLOR_DEPTH     4       // Bits per color channel (1-8)
-#define DEFAULT_BRIGHTNESS 128  // Default brightness (0-255)
+#define DEFAULT_BRIGHTNESS 255 // Default brightness (0-255)
 
 // Calculate total dimensions
 #define TOTAL_WIDTH     (PANEL_WIDTH * PANEL_CHAIN)
@@ -68,7 +68,10 @@
     #define PIN_CLK     11
     #define PIN_LAT     12
     #define PIN_OE      13
-    //#define BOARD_NAME  "Seengreat"
+   #ifdef BOARD_NAME
+        #undef BOARD_NAME
+    #endif
+    #define BOARD_NAME  "Seengreat"
 #endif
 
 // ---------- Pimoroni Interstate 75 ----------
@@ -109,9 +112,7 @@
     #define BOARD_NAME  "Custom"
 #endif
 
-#ifndef BOARD_NAME
-    #define BOARD_NAME "Seengreat"
-#endif
+ 
 
 // ==================== Row Address Bits ====================
 
