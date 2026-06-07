@@ -1,6 +1,6 @@
 /*
  * hub75_driver.h - HUB75 LED Matrix Driver for RP2040/RP2350
- * 
+ *
  * Bit-banged driver optimized for Pico/Pico 2
  * Supports configurable pin mapping via config.h
  */
@@ -32,6 +32,16 @@ extern const rgb_t RGB_MAGENTA;
 extern const rgb_t RGB_ORANGE;
 extern const rgb_t RGB_GRAY;
 extern const rgb_t RGB_DARK_GRAY;
+extern const rgb_t RGB_PURPLE;
+extern const rgb_t RGB_BROWN;
+extern const rgb_t RGB_PINK;
+extern const rgb_t RGB_LIME;
+extern const rgb_t RGB_TEAL;
+extern const rgb_t RGB_NAVY;
+
+// ==================== Color Palette ====================
+
+extern const rgb_t hub75_palette[256];
 
 // ==================== Function Prototypes ====================
 
@@ -55,6 +65,11 @@ void hub75_fill(rgb_t color);
  * Set a single pixel
  */
 void hub75_set_pixel(int x, int y, rgb_t color);
+
+/**
+ * Set a single pixel using palette index
+ */
+void hub75_set_pixel_palette(int x, int y, uint8_t palette_idx);
 
 /**
  * Get a pixel's color
@@ -97,6 +112,26 @@ void hub75_draw_circle(int cx, int cy, int radius, rgb_t color);
 void hub75_fill_circle(int cx, int cy, int radius, rgb_t color);
 
 /**
+ * Draw an ellipse outline
+ */
+void hub75_draw_ellipse(int cx, int cy, int rx, int ry, rgb_t color);
+
+/**
+ * Draw a filled ellipse
+ */
+void hub75_fill_ellipse(int cx, int cy, int rx, int ry, rgb_t color);
+
+/**
+ * Draw a round rectangle outline
+ */
+void hub75_draw_round_rect(int x, int y, int w, int h, int r, rgb_t color);
+
+/**
+ * Draw a filled round rectangle
+ */
+void hub75_fill_round_rect(int x, int y, int w, int h, int r, rgb_t color);
+
+/**
  * Draw triangle outline
  */
 void hub75_draw_triangle(int x0, int y0, int x1, int y1, int x2, int y2, rgb_t color);
@@ -130,6 +165,16 @@ void hub75_refresh(void);
  * Swap double buffer
  */
 void hub75_swap_buffers(void);
+
+/**
+ * Draw an image from an array of RGB colors
+ */
+void hub75_putimage(int x, int y, int width, int height, const rgb_t *image);
+
+/**
+ * Draw an image from an array of palette indices
+ */
+void hub75_putimage_palette(int x, int y, int width, int height, const uint8_t *image);
 
 /**
  * Create RGB color from components
