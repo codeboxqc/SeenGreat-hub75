@@ -1,13 +1,13 @@
 /*
- * hub75_driver.cpp - HUB75 LED Matrix Driver Implementation
+ * hub75_driver.cpp - HUB75 LED Matrix Graphics Engine Implementation
  */
 
-
 #include <string.h>
-#include "E:\PlatformIO\Seengrate\include\hub75_driver.h"
+#include <Arduino.h>
+#include "hardware/gpio.h" // Native Pico SDK
+#include "hub75_driver.h"
 
 // ==================== Predefined Colors ====================
-
 const rgb_t RGB_BLACK     = {0, 0, 0};
 const rgb_t RGB_WHITE     = {255, 255, 255};
 const rgb_t RGB_RED       = {255, 0, 0};
@@ -16,24 +16,23 @@ const rgb_t RGB_BLUE      = {0, 0, 255};
 const rgb_t RGB_YELLOW    = {255, 255, 0};
 const rgb_t RGB_CYAN      = {0, 255, 255};
 const rgb_t RGB_MAGENTA   = {255, 0, 255};
-const rgb_t RGB_ORANGE    = {255, 165, 0};
-const rgb_t RGB_GRAY      = {128, 128, 128};
-const rgb_t RGB_DARK_GRAY = {64, 64, 64};
+const rgb_t RGB_ORANGE    = {255, 165, 0}; 
+const rgb_t RGB_GRAY      = {128, 128, 128}; 
+const rgb_t RGB_DARK_GRAY = {64, 64, 64};    
 
-// ==================== Framebuffer ====================
-
+// ==================== Engine State ====================
 #define FB_SIZE (TOTAL_WIDTH * TOTAL_HEIGHT * 3)
-
 static uint8_t framebuffer_a[FB_SIZE];
 static uint8_t framebuffer_b[FB_SIZE];
 static uint8_t *draw_buffer = framebuffer_a;
 static uint8_t *display_buffer = framebuffer_b;
 
 static uint8_t brightness = DEFAULT_BRIGHTNESS;
-static volatile bool refresh_active = false;
+
+int camera_x = 0;
+int camera_y = 0;
 
 // ==================== 5x7 Font ====================
-
 static const uint8_t font_5x7[] PROGMEM = {
     0x00, 0x00, 0x00, 0x00, 0x00, // Space
     0x00, 0x00, 0x5F, 0x00, 0x00, // !
@@ -133,49 +132,41 @@ static const uint8_t font_5x7[] PROGMEM = {
     0x08, 0x1C, 0x2A, 0x08, 0x08, // <-
 };
 
-// ==================== Internal Functions ====================
+// ==================== Hardware Macros ====================
+// Using true hardware SDK. 
+// __asm volatile("nop") tells the CPU processor to do literally nothing 
+// for exactly 1 clock cycle (~6.6 nanoseconds on the Pico 2). 
+// By stacking a few, we perfectly pad the signal without wasting time!
 
 static inline void set_row_address(int row) {
-    digitalWrite(PIN_A, row & 0x01);
-    digitalWrite(PIN_B, (row >> 1) & 0x01);
-    digitalWrite(PIN_C, (row >> 2) & 0x01);
-    digitalWrite(PIN_D, (row >> 3) & 0x01);
+    gpio_put(PIN_A, row & 0x01);
+    gpio_put(PIN_B, (row >> 1) & 0x01);
+    gpio_put(PIN_C, (row >> 2) & 0x01);
+    gpio_put(PIN_D, (row >> 3) & 0x01);
     #if ADDR_BITS >= 5
-    digitalWrite(PIN_E, (row >> 4) & 0x01);
+    gpio_put(PIN_E, (row >> 4) & 0x01);
     #endif
 }
 
-static inline void clock_pulse() {
-    digitalWrite(PIN_CLK, HIGH);
-    digitalWrite(PIN_CLK, LOW);
+static inline void clock_pulse() { 
+    gpio_put(PIN_CLK, 1); 
+    // 5 NOPs = ~33ns delay. Just enough for the shift registers to see the data!
+    __asm volatile("nop\nnop\nnop\nnop\nnop\n"); 
+    gpio_put(PIN_CLK, 0); 
 }
 
-static inline void latch_data() {
-    digitalWrite(PIN_LAT, HIGH);
-    digitalWrite(PIN_LAT, LOW);
+static inline void latch_data()  { 
+    gpio_put(PIN_LAT, 1); 
+    __asm volatile("nop\nnop\nnop\nnop\nnop\n");
+    gpio_put(PIN_LAT, 0); 
 }
 
-// ==================== Public Functions ====================
+// ==================== System ====================
 
 void hub75_init(void) {
-    Serial.printf("[HUB75] Initializing for %s board\n", BOARD_NAME);
-    Serial.printf("[HUB75] Panel: %dx%d\n", TOTAL_WIDTH, TOTAL_HEIGHT);
-    Serial.printf("[HUB75] Pins R1:%d G1:%d B1:%d R2:%d G2:%d B2:%d\n",
-                  PIN_R1, PIN_G1, PIN_B1, PIN_R2, PIN_G2, PIN_B2);
-    Serial.printf("[HUB75] Pins A:%d B:%d C:%d D:%d E:%d\n",
-                  PIN_A, PIN_B, PIN_C, PIN_D, PIN_E);
-    Serial.printf("[HUB75] Pins CLK:%d LAT:%d OE:%d\n", PIN_CLK, PIN_LAT, PIN_OE);
-    
-    // Initialize pins
-    pinMode(PIN_R1, OUTPUT);
-    pinMode(PIN_G1, OUTPUT);
-    pinMode(PIN_B1, OUTPUT);
-    pinMode(PIN_R2, OUTPUT);
-    pinMode(PIN_G2, OUTPUT);
-    pinMode(PIN_B2, OUTPUT);
-    pinMode(PIN_A, OUTPUT);
-    pinMode(PIN_B, OUTPUT);
-    pinMode(PIN_C, OUTPUT);
+    pinMode(PIN_R1, OUTPUT); pinMode(PIN_G1, OUTPUT); pinMode(PIN_B1, OUTPUT);
+    pinMode(PIN_R2, OUTPUT); pinMode(PIN_G2, OUTPUT); pinMode(PIN_B2, OUTPUT);
+    pinMode(PIN_A, OUTPUT);  pinMode(PIN_B, OUTPUT);  pinMode(PIN_C, OUTPUT);
     pinMode(PIN_D, OUTPUT);
     #if ADDR_BITS >= 5
     pinMode(PIN_E, OUTPUT);
@@ -184,21 +175,18 @@ void hub75_init(void) {
     pinMode(PIN_LAT, OUTPUT);
     pinMode(PIN_OE, OUTPUT);
     
-    // Start with display off
-    digitalWrite(PIN_OE, HIGH);
-    digitalWrite(PIN_LAT, LOW);
-    digitalWrite(PIN_CLK, LOW);
+    digitalWrite(PIN_OE, 1);
+    digitalWrite(PIN_LAT, 0);
+    digitalWrite(PIN_CLK, 0);
     
-    // Clear framebuffers
     memset(framebuffer_a, 0, FB_SIZE);
     memset(framebuffer_b, 0, FB_SIZE);
-    
-    Serial.println("[HUB75] Initialized OK");
 }
 
-void hub75_clear(void) {
-    memset(draw_buffer, 0, FB_SIZE);
-}
+void hub75_set_camera(int x, int y) { camera_x = x; camera_y = y; }
+void hub75_clear(void) { memset(draw_buffer, 0, FB_SIZE); }
+
+// ==================== Core Drawing ====================
 
 void hub75_fill(rgb_t color) {
     for (int i = 0; i < TOTAL_WIDTH * TOTAL_HEIGHT; i++) {
@@ -209,45 +197,54 @@ void hub75_fill(rgb_t color) {
 }
 
 void hub75_set_pixel(int x, int y, rgb_t color) {
-    if (x < 0 || x >= TOTAL_WIDTH || y < 0 || y >= TOTAL_HEIGHT) return;
+    int screen_x = x - camera_x;
+    int screen_y = y - camera_y;
     
-    int idx = (y * TOTAL_WIDTH + x) * 3;
+    if (screen_x < 0 || screen_x >= TOTAL_WIDTH || screen_y < 0 || screen_y >= TOTAL_HEIGHT) return;
+    
+    int idx = (screen_y * TOTAL_WIDTH + screen_x) * 3;
     draw_buffer[idx + 0] = color.r;
     draw_buffer[idx + 1] = color.g;
     draw_buffer[idx + 2] = color.b;
 }
 
-rgb_t hub75_get_pixel(int x, int y) {
-    if (x < 0 || x >= TOTAL_WIDTH || y < 0 || y >= TOTAL_HEIGHT) {
-        return RGB_BLACK;
-    }
+void hub75_blend_pixel(int x, int y, rgb_t new_color, uint8_t alpha) {
+    int screen_x = x - camera_x;
+    int screen_y = y - camera_y;
     
-    int idx = (y * TOTAL_WIDTH + x) * 3;
-    rgb_t c = {
-        draw_buffer[idx + 0],
-        draw_buffer[idx + 1],
-        draw_buffer[idx + 2]
-    };
+    if (screen_x < 0 || screen_x >= TOTAL_WIDTH || screen_y < 0 || screen_y >= TOTAL_HEIGHT) return;
+    if (alpha == 0) return;
+    
+    int idx = (screen_y * TOTAL_WIDTH + screen_x) * 3;
+    draw_buffer[idx + 0] = (new_color.r * alpha + draw_buffer[idx + 0] * (255 - alpha)) >> 8;
+    draw_buffer[idx + 1] = (new_color.g * alpha + draw_buffer[idx + 1] * (255 - alpha)) >> 8;
+    draw_buffer[idx + 2] = (new_color.b * alpha + draw_buffer[idx + 2] * (255 - alpha)) >> 8;
+}
+
+rgb_t hub75_get_pixel(int x, int y) {
+    int screen_x = x - camera_x;
+    int screen_y = y - camera_y;
+    
+    if (screen_x < 0 || screen_x >= TOTAL_WIDTH || screen_y < 0 || screen_y >= TOTAL_HEIGHT) return RGB_BLACK;
+    
+    int idx = (screen_y * TOTAL_WIDTH + screen_x) * 3;
+    rgb_t c = { draw_buffer[idx + 0], draw_buffer[idx + 1], draw_buffer[idx + 2] };
     return c;
 }
 
+// ==================== Primitives ====================
+
 void hub75_draw_hline(int x, int y, int width, rgb_t color) {
-    for (int i = 0; i < width; i++) {
-        hub75_set_pixel(x + i, y, color);
-    }
+    for (int i = 0; i < width; i++) hub75_set_pixel(x + i, y, color);
 }
 
 void hub75_draw_vline(int x, int y, int height, rgb_t color) {
-    for (int i = 0; i < height; i++) {
-        hub75_set_pixel(x, y + i, color);
-    }
+    for (int i = 0; i < height; i++) hub75_set_pixel(x, y + i, color);
 }
 
 void hub75_draw_line(int x0, int y0, int x1, int y1, rgb_t color) {
-    int dx = abs(x1 - x0);
-    int dy = abs(y1 - y0);
-    int sx = x0 < x1 ? 1 : -1;
-    int sy = y0 < y1 ? 1 : -1;
+    int dx = abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    int dy = abs(y1 - y0), sy = y0 < y1 ? 1 : -1; 
     int err = dx - dy;
     
     while (1) {
@@ -267,28 +264,34 @@ void hub75_draw_rect(int x, int y, int width, int height, rgb_t color) {
 }
 
 void hub75_fill_rect(int x, int y, int width, int height, rgb_t color) {
-    for (int j = 0; j < height; j++) {
-        for (int i = 0; i < width; i++) {
-            hub75_set_pixel(x + i, y + j, color);
+    int screen_x = x - camera_x;
+    int screen_y = y - camera_y;
+    
+    if (screen_x >= TOTAL_WIDTH || screen_y >= TOTAL_HEIGHT || screen_x + width <= 0 || screen_y + height <= 0) return;
+    
+    int start_x = max(0, screen_x);
+    int start_y = max(0, screen_y);
+    int end_x = min((int)TOTAL_WIDTH, screen_x + width);
+    int end_y = min((int)TOTAL_HEIGHT, screen_y + height);
+
+    for (int j = start_y; j < end_y; j++) {
+        int row_offset = j * TOTAL_WIDTH;
+        for (int i = start_x; i < end_x; i++) {
+            int idx = (row_offset + i) * 3;
+            draw_buffer[idx + 0] = color.r;
+            draw_buffer[idx + 1] = color.g;
+            draw_buffer[idx + 2] = color.b;
         }
     }
 }
 
 void hub75_draw_circle(int cx, int cy, int radius, rgb_t color) {
-    int x = radius;
-    int y = 0;
-    int err = 0;
-    
+    int x = radius, y = 0, err = 0;
     while (x >= y) {
-        hub75_set_pixel(cx + x, cy + y, color);
-        hub75_set_pixel(cx + y, cy + x, color);
-        hub75_set_pixel(cx - y, cy + x, color);
-        hub75_set_pixel(cx - x, cy + y, color);
-        hub75_set_pixel(cx - x, cy - y, color);
-        hub75_set_pixel(cx - y, cy - x, color);
-        hub75_set_pixel(cx + y, cy - x, color);
-        hub75_set_pixel(cx + x, cy - y, color);
-        
+        hub75_set_pixel(cx + x, cy + y, color); hub75_set_pixel(cx + y, cy + x, color);
+        hub75_set_pixel(cx - y, cy + x, color); hub75_set_pixel(cx - x, cy + y, color);
+        hub75_set_pixel(cx - x, cy - y, color); hub75_set_pixel(cx - y, cy - x, color);
+        hub75_set_pixel(cx + y, cy - x, color); hub75_set_pixel(cx + x, cy - y, color);
         y++;
         if (err <= 0) err += 2 * y + 1;
         if (err > 0) { x--; err -= 2 * x + 1; }
@@ -298,9 +301,7 @@ void hub75_draw_circle(int cx, int cy, int radius, rgb_t color) {
 void hub75_fill_circle(int cx, int cy, int radius, rgb_t color) {
     for (int y = -radius; y <= radius; y++) {
         for (int x = -radius; x <= radius; x++) {
-            if (x*x + y*y <= radius*radius) {
-                hub75_set_pixel(cx + x, cy + y, color);
-            }
+            if (x*x + y*y <= radius*radius) hub75_set_pixel(cx + x, cy + y, color);
         }
     }
 }
@@ -311,20 +312,17 @@ void hub75_draw_triangle(int x0, int y0, int x1, int y1, int x2, int y2, rgb_t c
     hub75_draw_line(x2, y2, x0, y0, color);
 }
 
+// ==================== Text ====================
+
 void hub75_draw_char(int x, int y, char c, rgb_t color, int size) {
     if (c < 32 || c > 127) c = '?';
-    
     int idx = (c - 32) * 5;
-    
     for (int col = 0; col < 5; col++) {
         uint8_t line = pgm_read_byte(&font_5x7[idx + col]);
         for (int row = 0; row < 7; row++) {
             if (line & (1 << row)) {
-                if (size == 1) {
-                    hub75_set_pixel(x + col, y + row, color);
-                } else {
-                    hub75_fill_rect(x + col * size, y + row * size, size, size, color);
-                }
+                if (size == 1) hub75_set_pixel(x + col, y + row, color);
+                else hub75_fill_rect(x + col * size, y + row * size, size, size, color);
             }
         }
     }
@@ -332,43 +330,72 @@ void hub75_draw_char(int x, int y, char c, rgb_t color, int size) {
 
 void hub75_draw_string(int x, int y, const char *str, rgb_t color, int size) {
     int cursor_x = x;
-    
     while (*str) {
-        if (*str == '\n') {
-            cursor_x = x;
-            y += 8 * size;
-        } else {
-            hub75_draw_char(cursor_x, y, *str, color, size);
-            cursor_x += 6 * size;
-        }
+        if (*str == '\n') { cursor_x = x; y += 8 * size; } 
+        else { hub75_draw_char(cursor_x, y, *str, color, size); cursor_x += 6 * size; }
         str++;
     }
 }
 
 int hub75_string_width(const char *str, int size) {
     int width = 0;
-    while (*str) {
-        if (*str != '\n') width += 6 * size;
-        str++;
-    }
+    while (*str) { if (*str != '\n') width += 6 * size; str++; }
     return width > 0 ? width - size : 0;
 }
 
-void hub75_set_brightness(uint8_t b) {
-    brightness = b;
+// ==================== Images & Sprites ====================
+
+void hub75_draw_image(int x, int y, const uint16_t *bitmap, int w, int h) {
+    int screen_x = x - camera_x;
+    int screen_y = y - camera_y;
+
+    for (int j = 0; j < h; j++) {
+        for (int i = 0; i < w; i++) {
+            if (screen_x + i >= 0 && screen_x + i < TOTAL_WIDTH && screen_y + j >= 0 && screen_y + j < TOTAL_HEIGHT) {
+                uint16_t color565 = bitmap[j * w + i];
+                rgb_t c = rgb((color565 >> 8) & 0xF8, (color565 >> 3) & 0xFC, (color565 << 3) & 0xF8);
+                
+                int idx = ((screen_y + j) * TOTAL_WIDTH + (screen_x + i)) * 3;
+                draw_buffer[idx + 0] = c.r;
+                draw_buffer[idx + 1] = c.g;
+                draw_buffer[idx + 2] = c.b;
+            }
+        }
+    }
 }
+
+void hub75_draw_sprite(int x, int y, const uint16_t *bitmap, int w, int h, uint16_t transparent_color) {
+    int screen_x = x - camera_x;
+    int screen_y = y - camera_y;
+
+    for (int j = 0; j < h; j++) {
+        for (int i = 0; i < w; i++) {
+            uint16_t color565 = bitmap[j * w + i];
+            if (color565 == transparent_color) continue;
+            
+            if (screen_x + i >= 0 && screen_x + i < TOTAL_WIDTH && screen_y + j >= 0 && screen_y + j < TOTAL_HEIGHT) {
+                rgb_t c = rgb((color565 >> 8) & 0xF8, (color565 >> 3) & 0xFC, (color565 << 3) & 0xF8);
+                
+                int idx = ((screen_y + j) * TOTAL_WIDTH + (screen_x + i)) * 3;
+                draw_buffer[idx + 0] = c.r;
+                draw_buffer[idx + 1] = c.g;
+                draw_buffer[idx + 2] = c.b;
+            }
+        }
+    }
+}
+
+// ==================== Display Output ====================
+
+void hub75_set_brightness(uint8_t b) { brightness = b; }
 
 void hub75_refresh(void) {
     int half_height = TOTAL_HEIGHT / 2;
     
     for (int row = 0; row < half_height; row++) {
-        // Disable output during row switch
-        digitalWrite(PIN_OE, HIGH);
-        
-        // Set row address
+        digitalWrite(PIN_OE, 1); 
         set_row_address(row);
         
-        // Shift out pixel data
         for (int x = 0; x < TOTAL_WIDTH; x++) {
             int idx_top = (row * TOTAL_WIDTH + x) * 3;
             int idx_bot = ((row + half_height) * TOTAL_WIDTH + x) * 3;
@@ -380,25 +407,20 @@ void hub75_refresh(void) {
             uint8_t g2 = (display_buffer[idx_bot + 1] * brightness) >> 8;
             uint8_t b2 = (display_buffer[idx_bot + 2] * brightness) >> 8;
             
-            // 1-bit color output (threshold at 127)
-            digitalWrite(PIN_R1, r1 > 127);
-            digitalWrite(PIN_G1, g1 > 127);
-            digitalWrite(PIN_B1, b1 > 127);
-            digitalWrite(PIN_R2, r2 > 127);
-            digitalWrite(PIN_G2, g2 > 127);
-            digitalWrite(PIN_B2, b2 > 127);
+          // Fast SDK pushes
+            gpio_put(PIN_R1, r1 > 127);
+            gpio_put(PIN_G1, g1 > 127);
+            gpio_put(PIN_B1, b1 > 127);
+            gpio_put(PIN_R2, r2 > 127);
+            gpio_put(PIN_G2, g2 > 127);
+            gpio_put(PIN_B2, b2 > 127);
             
             clock_pulse();
         }
         
-        // Latch data
         latch_data();
-        
-        // Enable output
-        digitalWrite(PIN_OE, LOW);
-        
-        // Hold row active
-        delayMicroseconds(100);
+        digitalWrite(PIN_OE, 0); 
+        delayMicroseconds(100); 
     }
 }
 
