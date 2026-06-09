@@ -6,6 +6,7 @@ https://seengreat.com/wiki/75/rgb-matrix-adapter-board
 <img width="463" height="403" alt="111" src="https://github.com/user-attachments/assets/aa5b3ae9-e1a6-4d03-b799-9fd38747952b" />
 
 
+<img width="809" height="557" alt="123123123" src="https://github.com/user-attachments/assets/f9ab8236-c4ff-471d-9671-5b1a86646b74" />
 
 
 
