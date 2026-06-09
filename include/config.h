@@ -21,7 +21,7 @@
 #define PANEL_WIDTH     64      // Panel width in pixels
 #define PANEL_HEIGHT    64      // Panel height (32 or 64)
 #define PANEL_CHAIN     1       // Number of chained panels
-#define COLOR_DEPTH     4       // Bits per color channel (1-8)
+#define COLOR_DEPTH     8     
 #define DEFAULT_BRIGHTNESS 255 // Default brightness (0-255)
 
 // Calculate total dimensions
@@ -54,6 +54,7 @@
 
 // ---------- Seengreat Adapter Board (Default) ----------
 #if defined(BOARD_SEENGREAT) || (!defined(BOARD_INTERSTATE75) && !defined(BOARD_ADAFRUIT_PORTAL) && !defined(BOARD_CUSTOM))
+    // Swapped software definitions to match your board's physical copper traces
     #define PIN_R1      2
     #define PIN_G1      3
     #define PIN_B1      4
