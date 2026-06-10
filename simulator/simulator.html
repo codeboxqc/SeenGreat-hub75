@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HUB75 Super Art Engine Simulator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: #eee;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+            gap: 20px;
+        }
+        .main-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        canvas {
+            background-color: #000;
+            border: 2px solid #555;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            image-rendering: pixelated;
+        }
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            max-width: 600px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        .side-panel {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 4px;
+            width: 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            overflow-y: auto;
+            max-height: 90vh;
+        }
+        .side-panel label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        .side-panel input, .side-panel select {
+            width: 140px;
+            padding: 2px;
+            background: #444;
+            color: white;
+            border: 1px solid #666;
+            font-size: 11px;
+        }
+        .side-panel input[type="range"] {
+            width: 140px;
+        }
+        .palette-preview {
+            display: flex;
+            height: 15px;
+            margin-top: 2px;
+            width: 100%;
+        }
+        .palette-color {
+            flex: 1;
+        }
+        #formulaName {
+            font-size: 18px;
+            color: #4CAF50;
+            text-align: center;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .math-display {
+            background: #111;
+            border: 1px solid #4CAF50;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #4CAF50;
+            margin-top: 5px;
+            text-align: center;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            width: 280px;
+            min-height: 50px;
+            resize: vertical;
+        }
+        hr {
+            border-color: #444;
+            width: 100%;
+            margin: 4px 0;
+        }
+        .slider-val {
+            text-align: right; font-size: 10px; color: #aaa; margin-top: -8px; margin-bottom: 4px; display: block;
+        }
+        .btn-apply {
+            background-color: #2196F3;
+            width: 100%;
+            margin-top: 5px;
+        }
+        .btn-apply:hover {
+            background-color: #0b7dda;
+        }
+        .export-group {
+            display: flex;
+            gap: 10px;
+        }
+        .export-group button {
+            flex: 1;
+            padding: 10px 5px;
+            font-size: 12px;
+            background-color: #ff9800;
+        }
+        .export-group button:hover {
+            background-color: #e68a00;
+        }
+        .import-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="main-col">
+        <h1>HUB75 Super Art Engine Simulator</h1>
+        <div id="formulaName">Loading...</div>
+        <canvas id="matrix" width="256" height="256"></canvas>
+        
+        <textarea id="mathFormulaDisplay" class="math-display"></textarea>
+        <button id="btnApplyFormula" class="btn-apply">Apply Custom Formula Text</button>
+        
+        <div class="import-group">
+            <label for="btnLoadJSON" style="font-size: 12px; font-weight: bold; margin-top:10px;">Load Preset (.json):</label>
+            <input type="file" id="btnLoadJSON" accept=".json" style="width: 100%; padding: 5px; background: #333; color: white;">
+        </div>
+
+        <div class="controls">
+            <button id="btnRandom">Random Preset</button>
+            <button id="btnPrev">Previous</button>
+            <button id="btnNext">Next</button>
+            <button id="btnToggleAuto">AutoPlay: OFF</button>
+        </div>
+    </div>
+
+    <div class="side-panel">
+        <h3>Formula Controls</h3>
+        
+        <label>Preset List: <select id="selFormula"></select></label>
+        <label>Algorithm: <select id="selAlgo"></select></label>
+        <label>Palette: <select id="selPalette"></select></label>
+        <div class="palette-preview" id="palettePreview"></div>
+        <label>Light FX: <select id="selLightFx"></select></label>
+
+        <hr>
+        
+        <label>Duration (s): <input type="range" id="sliderPlayDuration" min="5" max="300" step="1" value="15"></label>
+        <span id="valPlayDuration" class="slider-val">15</span>
+        
+        <label>Symmetry (0-4): <input type="range" id="sliderSymmetry" min="0" max="4" step="1" value="0"></label>
+        <span id="valSymmetry" class="slider-val">0</span>
+
+        <label>Speed: <input type="range" id="sliderSpeed" min="0.1" max="10.0" step="0.1" value="1.0"></label>
+        <span id="valSpeed" class="slider-val">1.0</span>
+        
+        <label>BPM: <input type="range" id="sliderBPM" min="60" max="240" step="1" value="120"></label>
+        <span id="valBPM" class="slider-val">120</span>
+        
+        <label>Color Speed: <input type="range" id="sliderColorSpeed" min="0.0" max="10.0" step="0.1" value="1.0"></label>
+        <span id="valColorSpeed" class="slider-val">1.0</span>
+
+        <label>Density: <input type="range" id="sliderDensity" min="10" max="2000" step="10" value="100"></label>
+        <span id="valDensity" class="slider-val">100</span>
+
+        <label>Complexity: <input type="range" id="sliderComplexity" min="0.1" max="10.0" step="0.1" value="1.0"></label>
+        <span id="valComplexity" class="slider-val">1.0</span>
+
+        <label>Trail Fade: <input type="range" id="sliderFade" min="0.0" max="1.0" step="0.01" value="0.5"></label>
+        <span id="valFade" class="slider-val">0.5</span>
+
+        <hr>
+        <h4 style="margin:0;">Math & Physics Parameters</h4>
+
+        <label>Shape ID (1-100): <input type="number" id="inputShape" min="1" max="100" value="1"></label>
+        <label>Particle Type (1-100): <input type="number" id="inputPType" min="1" max="100" value="1"></label>
+
+        <label>Chaos (Rand Mod): <input type="range" id="sliderChaos" min="0.0" max="10.0" step="0.1" value="0.0"></label>
+        <span id="valChaos" class="slider-val">0.0</span>
+
+        <label>Math A: <input type="range" id="sliderMathA" min="0.0" max="10.0" step="0.01" value="1.0"></label>
+        <span id="valMathA" class="slider-val">1.0</span>
+
+        <label>Math B: <input type="range" id="sliderMathB" min="0.0" max="10.0" step="0.01" value="1.0"></label>
+        <span id="valMathB" class="slider-val">1.0</span>
+
+        <label>Math C: <input type="range" id="sliderMathC" min="0.0" max="10.0" step="0.1" value="1.0"></label>
+        <span id="valMathC" class="slider-val">1.0</span>
+
+        <label>Math D: <input type="range" id="sliderMathD" min="0.0" max="10.0" step="0.1" value="1.0"></label>
+        <span id="valMathD" class="slider-val">1.0</span>
+
+        <label>Math E: <input type="range" id="sliderMathE" min="0.0" max="10.0" step="0.1" value="1.0"></label>
+        <span id="valMathE" class="slider-val">1.0</span>
+
+        <label>Math F: <input type="range" id="sliderMathF" min="0.0" max="10.0" step="0.1" value="1.0"></label>
+        <span id="valMathF" class="slider-val">1.0</span>
+
+        <hr>
+        <div class="export-group">
+            <button id="btnExportJSON">Export JSON</button>
+            <button id="btnExportC" style="background-color: #2196F3;">Export C/C++</button>
+        </div>
+    </div>
+
+    <script src="engine.ut.js"></script>
+    <script>
+        const canvas = document.getElementById('matrix');
+        const ctx = canvas.getContext('2d');
+        const engine = new SuperArtEngine(canvas.width, canvas.height, ctx);
+        
+        let isUpdatingUI = false;
+
+        function initDropdowns() {
+            const selFormula = document.getElementById('selFormula');
+            selFormula.innerHTML = '';
+            engine.animations.forEach(anim => {
+                let opt = document.createElement('option');
+                opt.value = anim.id;
+                opt.innerText = `${anim.id}: ${anim.name}`;
+                selFormula.appendChild(opt);
+            });
+            // Add a special slot for loaded/custom configurations
+            let optCustom = document.createElement('option');
+            optCustom.value = -1;
+            optCustom.innerText = "Custom Loaded Config";
+            selFormula.appendChild(optCustom);
+
+            const selAlgo = document.getElementById('selAlgo');
+            engine.algorithms.forEach((name, idx) => {
+                let opt = document.createElement('option');
+                opt.value = idx;
+                opt.innerText = name;
+                selAlgo.appendChild(opt);
+            });
+
+            const selPalette = document.getElementById('selPalette');
+            engine.palettes.forEach((pal, idx) => {
+                let opt = document.createElement('option');
+                opt.value = idx;
+                opt.innerText = `${idx}: ${pal.name}`;
+                selPalette.appendChild(opt);
+            });
+
+            const selLightFx = document.getElementById('selLightFx');
+            engine.lightFx.forEach((fx, idx) => {
+                let opt = document.createElement('option');
+                opt.value = idx;
+                opt.innerText = `${idx}: ${fx.name}`;
+                selLightFx.appendChild(opt);
+            });
+        }
+
+        function updateUI(isCustomLoad = false) {
+            isUpdatingUI = true;
+            const anim = engine.currentAnim;
+            if (!anim) return;
+
+            document.getElementById('formulaName').innerText = isCustomLoad ? "Custom Loaded Config" : anim.name;
+            document.getElementById('selFormula').value = isCustomLoad ? -1 : anim.id;
+            
+            document.getElementById('selAlgo').value = anim.algo;
+            document.getElementById('selPalette').value = anim.palette;
+            document.getElementById('selLightFx').value = anim.lightFx;
+            
+            document.getElementById('inputShape').value = anim.shape;
+            document.getElementById('inputPType').value = anim.particleType;
+
+            document.getElementById('sliderSymmetry').value = anim.symmetry;
+            document.getElementById('valSymmetry').innerText = anim.symmetry;
+
+            document.getElementById('sliderChaos').value = anim.chaos;
+            document.getElementById('valChaos').innerText = anim.chaos;
+
+            document.getElementById('sliderPlayDuration').value = anim.playDuration;
+            document.getElementById('valPlayDuration').innerText = anim.playDuration;
+
+            document.getElementById('sliderSpeed').value = anim.speed;
+            document.getElementById('valSpeed').innerText = anim.speed;
+            
+            document.getElementById('sliderColorSpeed').value = anim.colorSpeed;
+            document.getElementById('valColorSpeed').innerText = anim.colorSpeed;
+            
+            document.getElementById('sliderBPM').value = anim.bpm;
+            document.getElementById('valBPM').innerText = anim.bpm;
+            
+            document.getElementById('sliderDensity').value = anim.density;
+            document.getElementById('valDensity').innerText = anim.density;
+            
+            document.getElementById('sliderComplexity').value = anim.complexity;
+            document.getElementById('valComplexity').innerText = anim.complexity;
+            
+            document.getElementById('sliderFade').value = anim.trailFade;
+            document.getElementById('valFade').innerText = anim.trailFade;
+
+            document.getElementById('sliderMathA').value = anim.mathA;
+            document.getElementById('valMathA').innerText = anim.mathA;
+            document.getElementById('sliderMathB').value = anim.mathB;
+            document.getElementById('valMathB').innerText = anim.mathB;
+            document.getElementById('sliderMathC').value = anim.mathC;
+            document.getElementById('valMathC').innerText = anim.mathC;
+            document.getElementById('sliderMathD').value = anim.mathD;
+            document.getElementById('valMathD').innerText = anim.mathD;
+            document.getElementById('sliderMathE').value = anim.mathE;
+            document.getElementById('valMathE').innerText = anim.mathE;
+            document.getElementById('sliderMathF').value = anim.mathF;
+            document.getElementById('valMathF').innerText = anim.mathF;
+
+            updatePalettePreview();
+            updateMathDisplay();
+            isUpdatingUI = false;
+        }
+
+        function updatePalettePreview() {
+            const palIdx = engine.currentAnim.palette;
+            const colors = engine.palettes[palIdx].colors;
+            const preview = document.getElementById('palettePreview');
+            let step = Math.floor(256 / 5);
+            let gradStr = `linear-gradient(to right, ${colors[0]} 0%, ${colors[step]} 25%, ${colors[step*2]} 50%, ${colors[step*3]} 75%, ${colors[255]} 100%)`;
+            preview.style.background = gradStr;
+        }
+
+        function updateMathDisplay() {
+            document.getElementById('mathFormulaDisplay').value = engine.getFormulaString();
+        }
+
+        function loadAnimation(id) {
+            engine.initAnimation(id);
+            updateUI();
+        }
+
+        // --- Event Listeners ---
+
+        document.getElementById('selFormula').addEventListener('change', (e) => {
+            if (isUpdatingUI) return;
+            let val = parseInt(e.target.value);
+            if(val !== -1) {
+                loadAnimation(val);
+            }
+        });
+
+        document.getElementById('selAlgo').addEventListener('change', (e) => {
+            if (isUpdatingUI) return;
+            engine.updateParameter('algo', parseInt(e.target.value));
+            updateMathDisplay();
+        });
+
+        document.getElementById('selPalette').addEventListener('change', (e) => {
+            if (isUpdatingUI) return;
+            engine.updateParameter('palette', parseInt(e.target.value));
+            updatePalettePreview();
+        });
+
+        document.getElementById('selLightFx').addEventListener('change', (e) => {
+            if (isUpdatingUI) return;
+            engine.updateParameter('lightFx', parseInt(e.target.value));
+        });
+
+        document.getElementById('inputShape').addEventListener('change', (e) => {
+            if (isUpdatingUI) return;
+            engine.updateParameter('shape', parseInt(e.target.value));
+            updateMathDisplay();
+        });
+
+        document.getElementById('inputPType').addEventListener('change', (e) => {
+            if (isUpdatingUI) return;
+            engine.updateParameter('particleType', parseInt(e.target.value));
+            updateMathDisplay();
+        });
+
+        const hookSlider = (id, paramKey) => {
+            document.getElementById(`slider${id}`).addEventListener('input', (e) => {
+                if (isUpdatingUI) return;
+                const val = parseFloat(e.target.value);
+                document.getElementById(`val${id}`).innerText = val;
+                engine.updateParameter(paramKey, val);
+                if (paramKey.startsWith('math') || paramKey === 'chaos' || paramKey === 'symmetry' || paramKey === 'colorSpeed' || paramKey === 'bpm' || paramKey === 'playDuration') updateMathDisplay();
+            });
+        };
+
+        hookSlider('Speed', 'speed');
+        hookSlider('Complexity', 'complexity');
+        hookSlider('Fade', 'trailFade');
+        hookSlider('Chaos', 'chaos');
+        hookSlider('Symmetry', 'symmetry');
+        hookSlider('ColorSpeed', 'colorSpeed');
+        hookSlider('BPM', 'bpm');
+        hookSlider('PlayDuration', 'playDuration');
+        hookSlider('MathA', 'mathA');
+        hookSlider('MathB', 'mathB');
+        hookSlider('MathC', 'mathC');
+        hookSlider('MathD', 'mathD');
+        hookSlider('MathE', 'mathE');
+        hookSlider('MathF', 'mathF');
+
+        document.getElementById('sliderDensity').addEventListener('change', (e) => {
+            if (isUpdatingUI) return;
+            const val = parseInt(e.target.value);
+            document.getElementById('valDensity').innerText = val;
+            engine.updateParameter('density', val);
+        });
+        document.getElementById('sliderDensity').addEventListener('input', (e) => {
+            document.getElementById('valDensity').innerText = e.target.value;
+        });
+
+        document.getElementById('btnRandom').addEventListener('click', () => {
+            const randomId = Math.floor(Math.random() * engine.animations.length) + 1;
+            loadAnimation(randomId);
+        });
+
+        document.getElementById('btnNext').addEventListener('click', () => {
+            if (engine.currentAnim.id === -1) { loadAnimation(1); return; }
+            loadAnimation(engine.currentAnim.id + 1);
+        });
+
+        document.getElementById('btnPrev').addEventListener('click', () => {
+            if (engine.currentAnim.id === -1) { loadAnimation(1); return; }
+            loadAnimation(engine.currentAnim.id - 1);
+        });
+
+        document.getElementById('btnToggleAuto').addEventListener('click', (e) => {
+            engine.autoPlay = !engine.autoPlay;
+            e.target.innerText = `AutoPlay: ${engine.autoPlay ? 'ON' : 'OFF'}`;
+            if (engine.autoPlay) engine.lastSwitchTime = Date.now();
+        });
+
+        document.getElementById('btnApplyFormula').addEventListener('click', () => {
+            let str = document.getElementById('mathFormulaDisplay').value;
+            if (engine.applyFormulaString(str)) {
+                // Important: Tag it as custom so UI dropdown switches
+                engine.currentAnim.id = -1;
+                engine.currentAnim.name = "Custom Text Formula";
+                updateUI(true); 
+                alert("Formula Applied Successfully!");
+            } else {
+                alert("Failed to parse formula. Make sure it follows the exact format.");
+            }
+        });
+
+        document.getElementById('btnExportC').addEventListener('click', () => {
+            const cStr = engine.exportConfigC();
+            const blob = new Blob([cStr], {type: 'text/plain'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            let n = engine.currentAnim.id === -1 ? "Custom" : engine.currentAnim.id;
+            a.download = `ArtConfig_${n}_${engine.currentAnim.name.replace(/\s+/g, '_')}.h`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        document.getElementById('btnExportJSON').addEventListener('click', () => {
+            const jsonStr = engine.exportConfigJson();
+            const blob = new Blob([jsonStr], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            let n = engine.currentAnim.id === -1 ? "Custom" : engine.currentAnim.id;
+            a.download = `ArtConfig_${n}_${engine.currentAnim.name.replace(/\s+/g, '_')}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+        
+        // Handle loading JSON
+        document.getElementById('btnLoadJSON').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                const contents = evt.target.result;
+                if (engine.loadConfigJson(contents)) {
+                    // Force the loaded configuration to act as the current active one
+                    engine.currentAnim.id = -1; 
+                    engine.currentAnim.name = "Custom Loaded JSON";
+                    updateUI(true);
+                    
+                    // Reset input so we can load the same file again if desired
+                    document.getElementById('btnLoadJSON').value = ""; 
+                    alert("JSON Configuration loaded and playing successfully!");
+                } else {
+                    alert("Failed to load JSON file. Invalid format.");
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        window.addEventListener('keydown', (e) => {
+            // Disable keybinds if we are typing inside the textarea
+            if (document.activeElement === document.getElementById('mathFormulaDisplay')) return;
+
+            if (e.key === 's' || e.key === 'S') {
+                document.getElementById('btnExportJSON').click();
+            }
+            if (e.key === 'c' || e.key === 'C') {
+                document.getElementById('btnExportC').click();
+            }
+            if (e.key === 'ArrowRight') {
+                document.getElementById('btnNext').click();
+            }
+            if (e.key === 'ArrowLeft') {
+                document.getElementById('btnPrev').click();
+            }
+        });
+
+        initDropdowns();
+        loadAnimation(1);
+        
+        function loop() {
+            const currentId = engine.currentAnim ? engine.currentAnim.id : null;
+            engine.update();
+            
+            // Only auto-update UI if the engine itself switched the preset (like AutoPlay)
+            // don't update if we are just tweaking sliders or it resets the whole UI
+            if (engine.currentAnim && engine.currentAnim.id !== currentId && engine.currentAnim.id !== -1) {
+                updateUI();
+            }
+            
+            engine.draw();
+            requestAnimationFrame(loop);
+        }
+        loop();
+
+    </script>
+</body>
+</html>
