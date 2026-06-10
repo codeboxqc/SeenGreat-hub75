@@ -653,20 +653,28 @@ void hub75_refresh(void) {
 
                     // Clear all colour pins and set the new values in one go
                     // Using gpio_put_masked for atomic masked update (compatible with both cores)
-                    // First, clear all colour pins by setting them to 0
-                    gpio_put_masked(ALL_COL_MASK, 0);
-                    // Then set the desired pins high
-                    gpio_put_masked(out, out);
+                    gpio_put_masked(ALL_COL_MASK, out);
                     clock_pulse();
                 }
             }
+
+            // Wait for previous bit to finish displaying BEFORE latching new row data
+            // BUT wait, OE is disabled during row switch. Wait, we should latch AFTER clocking out data.
+            digitalWrite(PIN_OE, 1); // Disable display while latching and switching row
             latch_data();
+            // Latch data is now on the output, enable display for oe_time
             digitalWrite(PIN_OE, 0);
-            delayMicroseconds(oe_time[bit]);   // OE duration for this bit
-            digitalWrite(PIN_OE, 1);
-            //delayMicroseconds(1);
+
+            // delay using a busy-wait loop for precise sub-microsecond timing for short bits
+            if (oe_time[bit] <= 10) {
+                for (volatile int i = 0; i < oe_time[bit] * 10; i++) {}
+            } else {
+                delayMicroseconds(oe_time[bit]);   // OE duration for this bit
+            }
         }
     }
+    // Turn off display after full refresh
+    digitalWrite(PIN_OE, 1);
 }
 
 // ==================== Double Buffering ====================
