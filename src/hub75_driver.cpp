@@ -651,7 +651,10 @@ void hub75_refresh(void) {
 
                     // Clear all colour pins and set the new values in one go
                     // Using gpio_put_masked for atomic masked update (compatible with both cores)
-                    gpio_put_masked(ALL_COL_MASK, out);
+                    // First, clear all colour pins by setting them to 0
+                    gpio_put_masked(ALL_COL_MASK, 0);
+                    // Then set the desired pins high
+                    gpio_put_masked(out, out);
                     clock_pulse();
                 }
             }
