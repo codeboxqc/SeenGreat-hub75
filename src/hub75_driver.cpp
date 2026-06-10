@@ -220,10 +220,24 @@ void hub75_init(void) {
 void hub75_set_camera(int x, int y) { camera_x = x; camera_y = y; }
 void hub75_clear(void) { memset(draw_buffer, 0, FB_SIZE); }
 
+void hub75_fade(uint8_t amount) {
+    if (amount == 0) return;
+    if (amount >= 255) {
+        memset(draw_buffer, 0, FB_SIZE);
+        return;
+    }
+    uint16_t mult = 256 - amount;
+    for (int i = 0; i < FB_SIZE; i++) {
+        draw_buffer[i] = (draw_buffer[i] * mult) >> 8;
+    }
+}
+
 // ==================== Pre‑scale Brightness on Display Buffer ====================
 static void pre_scale_brightness(void) {
+    if (!gamma_init) init_gamma();
     for (int i = 0; i < FB_SIZE; i++) {
-        display_buffer[i] = (display_buffer[i] * brightness) >> 8;
+        uint8_t scaled = (display_buffer[i] * brightness) >> 8;
+        display_buffer[i] = gamma_lut[scaled];
     }
 }
 
@@ -334,6 +348,48 @@ void hub75_fill_circle(int cx, int cy, int radius, rgb_t color) {
         }
     }
 }
+
+void hub75_draw_circle_f(float cx, float cy, float radius, rgb_t color) {
+    int min_x = floor(cx - radius - 1.0f);
+    int max_x = ceil(cx + radius + 1.0f);
+    int min_y = floor(cy - radius - 1.0f);
+    int max_y = ceil(cy + radius + 1.0f);
+
+    for (int y = min_y; y <= max_y; y++) {
+        for (int x = min_x; x <= max_x; x++) {
+            float dx = x - cx;
+            float dy = y - cy;
+            float dist = sqrtf(dx * dx + dy * dy);
+            float diff = fabs(dist - radius);
+            if (diff < 1.0f) {
+                uint8_t alpha = (uint8_t)((1.0f - diff) * 255.0f);
+                hub75_blend_pixel(x, y, color, alpha);
+            }
+        }
+    }
+}
+
+void hub75_fill_circle_f(float cx, float cy, float radius, rgb_t color) {
+    int min_x = floor(cx - radius - 1.0f);
+    int max_x = ceil(cx + radius + 1.0f);
+    int min_y = floor(cy - radius - 1.0f);
+    int max_y = ceil(cy + radius + 1.0f);
+
+    for (int y = min_y; y <= max_y; y++) {
+        for (int x = min_x; x <= max_x; x++) {
+            float dx = x - cx;
+            float dy = y - cy;
+            float dist = sqrtf(dx * dx + dy * dy);
+            if (dist <= radius) {
+                hub75_set_pixel(x, y, color);
+            } else if (dist < radius + 1.0f) {
+                uint8_t alpha = (uint8_t)((radius + 1.0f - dist) * 255.0f);
+                hub75_blend_pixel(x, y, color, alpha);
+            }
+        }
+    }
+}
+
 void hub75_draw_triangle(int x0, int y0, int x1, int y1, int x2, int y2, rgb_t color) {
     hub75_draw_line(x0, y0, x1, y1, color);
     hub75_draw_line(x1, y1, x2, y2, color);

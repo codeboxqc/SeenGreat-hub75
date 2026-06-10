@@ -52,6 +52,7 @@ void hub75_reset_clip(void);
 
 // Basic drawing
 void hub75_clear(void);
+void hub75_fade(uint8_t amount);
 void hub75_fill(rgb_t color);
 void hub75_set_pixel(int x, int y, rgb_t color);
 void hub75_blend_pixel(int x, int y, rgb_t new_color, uint8_t alpha);
@@ -65,6 +66,8 @@ void hub75_draw_rect(int x, int y, int width, int height, rgb_t color);
 void hub75_fill_rect(int x, int y, int width, int height, rgb_t color);
 void hub75_draw_circle(int cx, int cy, int radius, rgb_t color);
 void hub75_fill_circle(int cx, int cy, int radius, rgb_t color);
+void hub75_draw_circle_f(float cx, float cy, float radius, rgb_t color);
+void hub75_fill_circle_f(float cx, float cy, float radius, rgb_t color);
 void hub75_draw_triangle(int x0, int y0, int x1, int y1, int x2, int y2, rgb_t color);
 
 void hub75_draw_rounded_rect(int x, int y, int w, int h, int radius, rgb_t color);

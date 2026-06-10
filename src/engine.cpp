@@ -81,9 +81,9 @@ void SuperArtEngine::initPalettes() {
             rgb_t c1 = basePalettes[p][idx1];
             rgb_t c2 = basePalettes[p][idx2];
 
-            palettes[p].colors[i].r = c1.r + (c2.r - c1.r) * localT;
-            palettes[p].colors[i].g = c1.g + (c2.g - c1.g) * localT;
-            palettes[p].colors[i].b = c1.b + (c2.b - c1.b) * localT;
+            palettes[p].colors[i].r = round(c1.r + (c2.r - c1.r) * localT);
+            palettes[p].colors[i].g = round(c1.g + (c2.g - c1.g) * localT);
+            palettes[p].colors[i].b = round(c1.b + (c2.b - c1.b) * localT);
         }
     }
 }
@@ -336,19 +336,19 @@ void SuperArtEngine::drawShape(float x, float y, float size, bool fill, float al
 
     if (fill) {
         if (cat == 0) {
-            hub75_fill_circle(x, y, s, c);
+            hub75_fill_circle_f(x, y, s, c);
         } else if (cat == 1) {
-            hub75_fill_rect(x - s, y - s, s * 2, s * 2, c);
+            hub75_fill_rect((int)(x - s), (int)(y - s), (int)(s * 2), (int)(s * 2), c);
         } else {
-            hub75_fill_circle(x, y, s, c);
+            hub75_fill_circle_f(x, y, s, c);
         }
     } else {
         if (cat == 0) {
-            hub75_draw_circle(x, y, s, c);
+            hub75_draw_circle_f(x, y, s, c);
         } else if (cat == 1) {
-            hub75_draw_rect(x - s, y - s, s * 2, s * 2, c);
+            hub75_draw_rect((int)(x - s), (int)(y - s), (int)(s * 2), (int)(s * 2), c);
         } else {
-            hub75_draw_circle(x, y, s, c);
+            hub75_draw_circle_f(x, y, s, c);
         }
     }
 }
@@ -360,11 +360,11 @@ void SuperArtEngine::draw() {
     bool clearsFrame = (algo == 1 || algo == 3 || algo == 6 || algo == 8 || algo == 9 || algo == 10 || algo == 12 || algo == 13 || algo == 14 || algo == 15 || algo == 17 || algo == 18 || algo == 19 || algo == 23);
     if (clearsFrame) fade = 1.0f;
 
-    // Simplification for fade: if 1.0, clear. Otherwise, we can simulate fade by drawing a black rect with alpha.
-    // Since hub75 doesn't have native screen alpha fade easily, we can just clear if fade > 0.5 for now,
-    // or rely on blending pixels... We will clear if fade == 1.0f.
-    if (fade == 1.0f) {
+    if (fade >= 1.0f) {
         hub75_clear();
+    } else if (fade > 0.0f) {
+        uint8_t amount = (uint8_t)(fade * 255.0f);
+        hub75_fade(amount);
     }
 
     // Symmetry is hard without an offscreen buffer. We will just draw base algorithm for now.
@@ -411,7 +411,7 @@ void SuperArtEngine::drawGameOfLife() {
                 rgb_t c = getColor((i / (float)cols + j / (float)rows) * 128.0f);
                 float cx = i * cellW + cellW / 2.0f;
                 float cy = j * cellH + cellH / 2.0f;
-                hub75_fill_circle(cx, cy, cellW / 2.0f, c);
+                hub75_fill_circle_f(cx, cy, cellW / 2.0f, c);
             }
         }
     }
@@ -527,7 +527,7 @@ void SuperArtEngine::drawLSystem() {
 void SuperArtEngine::drawParticles() {
     for (auto& p : particles) {
         rgb_t c = getColor(p.colorIdx);
-        hub75_fill_circle(p.x, p.y, 2, c); // using circle as proxy
+        hub75_fill_circle_f(p.x, p.y, 2.0f, c); // using circle as proxy
     }
 }
 
@@ -550,7 +550,7 @@ void SuperArtEngine::drawNeuralMorph() {
     for (auto& p : particles) {
         rgb_t c = getColor(p.colorIdx);
         float s = fmax(0.5f, fabs(fastSin(time + p.x)*5*currentAnim.mathE) + currentAnim.mathD);
-        hub75_fill_circle(p.x, p.y, s, c);
+        hub75_fill_circle_f(p.x, p.y, s, c);
     }
     float maxDist = 50 * a * b;
     for (size_t i = 0; i < particles.size(); i++) {
@@ -591,17 +591,16 @@ void SuperArtEngine::drawLEDPulse() {
             float pulse = (fastSin(time * a + x * 0.05f * b + y * 0.05f * c) + 1.0f) / 2.0f;
             rgb_t color = getColor(pulse * 255.0f);
 
-            int cx = x + 5;
-            int cy = y + 5;
+            float cx = x + 5.0f;
+            float cy = y + 5.0f;
             float r = pulse * 4.0f + 1.0f;
 
-            // For hub75, we can't easily alpha-blend a circle shape without a custom blend circle.
-            // We'll just draw the circle. Alpha effect is achieved by color darkness implicitly on LED matrix.
+            // Alpha effect is achieved by color darkness implicitly on LED matrix.
             color.r = (color.r * (int)(pulse*255)) >> 8;
             color.g = (color.g * (int)(pulse*255)) >> 8;
             color.b = (color.b * (int)(pulse*255)) >> 8;
 
-            hub75_fill_circle(cx, cy, r, color);
+            hub75_fill_circle_f(cx, cy, r, color);
         }
     }
 }
@@ -615,7 +614,7 @@ void SuperArtEngine::drawGeometric() {
         for (int cx = 0; cx < cells; cx++) {
             float n = fastSin(cx * a + cy * b + time * c) + ((random(0,100)/100.0f)*chaos);
             rgb_t col = getColor(fabs(n) * 255.0f);
-            hub75_fill_circle(cx*cellSize + cellSize/2, cy*cellSize + cellSize/2, fmax(1, cellSize/2), col);
+            hub75_fill_circle_f(cx*cellSize + cellSize/2.0f, cy*cellSize + cellSize/2.0f, fmax(1.0f, cellSize/2.0f), col);
         }
     }
 }
@@ -657,7 +656,7 @@ void SuperArtEngine::drawNake() {
         float x1 = (fastSin(time + i) * 0.5f + 0.5f) * width;
         float y1 = (fastCos(time + i*chaos) * 0.5f + 0.5f) * height;
         rgb_t col = getColor(i % 256);
-        hub75_draw_circle(x1, y1, fmax(1, len/4), col);
+        hub75_draw_circle_f(x1, y1, fmax(1.0f, len/4.0f), col);
     }
 }
 
@@ -669,7 +668,7 @@ void SuperArtEngine::drawNees() {
             float dx = ((random(0,100)/100.0f)-0.5f) * j * currentAnim.mathA * (1+currentAnim.chaos*0.1f);
             float dy = ((random(0,100)/100.0f)-0.5f) * j * currentAnim.mathB * (1+currentAnim.chaos*0.1f);
             rgb_t col = getColor(j*25);
-            hub75_draw_circle(i*cellW + dx + cellW/2, j*cellH + dy + cellH/2, fmax(1, (cellW-4)/2 * fmax(0.1f, currentAnim.mathC)), col);
+            hub75_draw_circle_f(i*cellW + dx + cellW/2.0f, j*cellH + dy + cellH/2.0f, fmax(1.0f, (cellW-4)/2.0f * fmax(0.1f, currentAnim.mathC)), col);
         }
     }
 }
@@ -695,15 +694,15 @@ void SuperArtEngine::drawFidenza() {
         rgb_t col = getColor(p.colorIdx);
         float baseW = currentAnim.mathC * 5;
         float varW = fastSin(p.x * 0.05f)*4 * currentAnim.mathD;
-        float w = fmax(1, baseW + varW);
-        hub75_fill_circle(p.x, p.y, w, col);
+        float w = fmax(1.0f, baseW + varW);
+        hub75_fill_circle_f(p.x, p.y, w, col);
     }
 }
 
 void SuperArtEngine::drawRingers() {
     for (auto& p : pegs) {
         rgb_t col = getColor(0);
-        hub75_fill_circle(p.x, p.y, fmax(1, 4 * currentAnim.mathD), col);
+        hub75_fill_circle_f(p.x, p.y, fmax(1.0f, 4.0f * currentAnim.mathD), col);
     }
     rgb_t col = getColor(128);
     bool first = true;
@@ -759,18 +758,18 @@ void SuperArtEngine::drawPassersby() {
     // simulate shadow hole
     float focus = currentAnim.mathB;
     rgb_t dark = {0,0,0};
-    hub75_fill_circle(width/2, height/2, (width/2.5f) * focus, dark); // fake alpha with black
+    hub75_fill_circle_f(width/2.0f, height/2.0f, (width/2.5f) * focus, dark); // fake alpha with black
 }
 
 void SuperArtEngine::drawAnadol() {
     for (auto& p : particles) {
-        float rad = fmax(1, (10 + fastSin(p.x * 0.05f + time)*5) * currentAnim.mathC);
+        float rad = fmax(1.0f, (10.0f + fastSin(p.x * 0.05f + time)*5.0f) * currentAnim.mathC);
         rgb_t c = getColor(p.colorIdx);
         // fake alpha
         c.r = (c.r * (int)(0.3f * currentAnim.mathD * 255)) >> 8;
         c.g = (c.g * (int)(0.3f * currentAnim.mathD * 255)) >> 8;
         c.b = (c.b * (int)(0.3f * currentAnim.mathD * 255)) >> 8;
-        hub75_fill_circle(p.x, p.y, rad, c);
+        hub75_fill_circle_f(p.x, p.y, rad, c);
     }
 }
 
