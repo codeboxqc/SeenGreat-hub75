@@ -625,10 +625,8 @@ static const uint16_t oe_time[] = {2, 4, 6, 10, 18, 30, 50, 80};
 
 void hub75_refresh(void) {
     int half = TOTAL_HEIGHT / 2;
-    for (int row = 0; row < half; row++) {
-        set_row_address(row);
-        // Process each bit plane (MSB to LSB)
-        for (int bit = COLOR_DEPTH - 1; bit >= 0; bit--) {
+    for (int bit = COLOR_DEPTH - 1; bit >= 0; bit--) {
+        for (int row = 0; row < half; row++) {
             // Process row in chunks of 4 pixels
             for (int x = 0; x < TOTAL_WIDTH; x += 4) {
                 for (int k = 0; k < 4 && (x + k) < TOTAL_WIDTH; k++) {
@@ -658,12 +656,10 @@ void hub75_refresh(void) {
                 }
             }
 
-            // Wait for previous bit to finish displaying BEFORE latching new row data
-            // BUT wait, OE is disabled during row switch. Wait, we should latch AFTER clocking out data.
             digitalWrite(PIN_OE, 1); // Disable display while latching and switching row
             latch_data();
-            // Latch data is now on the output, enable display for oe_time
-            digitalWrite(PIN_OE, 0);
+            set_row_address(row);
+            digitalWrite(PIN_OE, 0); // Enable display
 
             // delay using a busy-wait loop for precise sub-microsecond timing for short bits
             if (oe_time[bit] <= 10) {
@@ -671,10 +667,9 @@ void hub75_refresh(void) {
             } else {
                 delayMicroseconds(oe_time[bit]);   // OE duration for this bit
             }
+            digitalWrite(PIN_OE, 1); // Turn off after displaying bit
         }
     }
-    // Turn off display after full refresh
-    digitalWrite(PIN_OE, 1);
 }
 
 // ==================== Double Buffering ====================
