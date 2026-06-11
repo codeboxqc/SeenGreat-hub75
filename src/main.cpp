@@ -53,11 +53,12 @@ void setup() {
 
     randomSeed(micros());
 
+    engine_ready = true;
+
     engine = new SuperArtEngine(TOTAL_WIDTH, TOTAL_HEIGHT);
     token_init();
     
     Serial.println("Super Art Engine Started");
-    engine_ready = true; 
 }
 
 void loop() {

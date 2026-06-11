@@ -596,9 +596,12 @@ static rgb_t apply_hue_shift(rgb_t c) {
 
 // ==================== Brightness ====================
 void hub75_set_brightness(uint8_t b) {
+    if (!gamma_init) init_gamma();
     brightness = b;
     for (int i = 0; i < 256; i++) {
-        brightnessLUT[i] = (i * b) >> 8;
+        // Apply gamma correction then brightness scaling for 16-million true colors rendering
+        uint8_t gamma_val = gamma_lut[i];
+        brightnessLUT[i] = (gamma_val * b) >> 8;
     }
 }
 

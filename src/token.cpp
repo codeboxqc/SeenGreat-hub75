@@ -96,10 +96,11 @@ void token_init() {
             Serial.print("token ");
             Serial.println(i + 1);
 
-            // Draw visual loading progress bar on the LED matrix
+            // Draw text token counter on the LED matrix
             hub75_clear();
-            int progressWidth = ((i + 1) * TOTAL_WIDTH) / numTokens;
-            hub75_fill_rect(0, TOTAL_HEIGHT / 2 - 2, progressWidth, 4, {0, 255, 0});
+            char tokenText[16];
+            sprintf(tokenText, "Token %d", i + 1);
+            hub75_draw_string(2, TOTAL_HEIGHT / 2 - 4, tokenText, {0, 255, 0}, 1);
             hub75_swap_buffers();
 
             delay(1000); // 1-second delay exactly as requested
