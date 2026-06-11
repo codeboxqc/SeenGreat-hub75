@@ -136,8 +136,7 @@ float SuperArtEngine::fastHypot(float dx, float dy) {
 }
 
 rgb_t SuperArtEngine::getColor(float index) {
-    // Decouple color timing from the animation's specific 'time' modifier and tie it to global time
-    float finalIndex = index + (millis() * 0.001f * currentAnim.colorSpeed * 50.0f);
+    float finalIndex = index + (time * currentAnim.colorSpeed * 50.0f);
     int safeIdx = ((int)fabs(finalIndex)) % 256;
     int safePalette = currentAnim.palette % 40;
     if (safePalette < 0) safePalette = 0;
@@ -209,7 +208,7 @@ void SuperArtEngine::generateLSystem(int iters) {
 
 void SuperArtEngine::update() {
     // Treat 'speed' correctly across all animations irrespective of BPM (mimicking JS logic)
-    float timeMod = currentAnim.speed * 0.025f;
+    float timeMod = currentAnim.speed * 0.05f;
     time += timeMod;
     frameCounter++;
     
