@@ -328,11 +328,10 @@ void SuperArtEngine::updateAIBoids() {
 
 void SuperArtEngine::updateNeuralMorph() { updateFlowFields(); }
 
-void SuperArtEngine::drawShape(float x, float y, float size, bool fill, float alpha) {
+void SuperArtEngine::drawShape(float x, float y, float size, bool fill, float alpha, rgb_t c) {
     int shapeID = currentAnim.shape;
     int cat = shapeID % 10;
     float s = fmax(0.5f, size * (currentAnim.mathD * 0.2f + 0.8f));
-    rgb_t c = getColor(0); // Default color if not explicitly provided by algorithm
     
     if (fill) {
         if (cat == 0) {
@@ -411,7 +410,7 @@ void SuperArtEngine::drawGameOfLife() {
                 rgb_t c = getColor((i / (float)cols + j / (float)rows) * 128.0f);
                 float cx = i * cellW + cellW / 2.0f;
                 float cy = j * cellH + cellH / 2.0f;
-                hub75_fill_circle(cx, cy, cellW / 2.0f, c);
+                drawShape(cx, cy, cellW / 2.0f, true, 1.0f, c);
             }
         }
     }
@@ -527,7 +526,7 @@ void SuperArtEngine::drawLSystem() {
 void SuperArtEngine::drawParticles() {
     for (auto& p : particles) {
         rgb_t c = getColor(p.colorIdx);
-        hub75_fill_circle(p.x, p.y, 2, c); // using circle as proxy
+        drawShape(p.x, p.y, 2, true, 1.0f, c);
     }
 }
 
@@ -601,7 +600,7 @@ void SuperArtEngine::drawLEDPulse() {
             color.g = (color.g * (int)(pulse*255)) >> 8;
             color.b = (color.b * (int)(pulse*255)) >> 8;
             
-            hub75_fill_circle(cx, cy, r, color);
+            drawShape(cx, cy, r, true, pulse, color);
         }
     }
 }
@@ -615,7 +614,7 @@ void SuperArtEngine::drawGeometric() {
         for (int cx = 0; cx < cells; cx++) {
             float n = fastSin(cx * a + cy * b + time * c) + ((random(0,100)/100.0f)*chaos);
             rgb_t col = getColor(fabs(n) * 255.0f);
-            hub75_fill_circle(cx*cellSize + cellSize/2, cy*cellSize + cellSize/2, fmax(1, cellSize/2), col);
+            drawShape(cx*cellSize + cellSize/2, cy*cellSize + cellSize/2, fmax(1, cellSize/2), true, 1.0f, col);
         }
     }
 }
@@ -657,7 +656,7 @@ void SuperArtEngine::drawNake() {
         float x1 = (fastSin(time + i) * 0.5f + 0.5f) * width;
         float y1 = (fastCos(time + i*chaos) * 0.5f + 0.5f) * height;
         rgb_t col = getColor(i % 256);
-        hub75_draw_circle(x1, y1, fmax(1, len/4), col);
+        drawShape(x1, y1, fmax(1, len/4), false, 1.0f, col);
     }
 }
 
@@ -669,7 +668,7 @@ void SuperArtEngine::drawNees() {
             float dx = ((random(0,100)/100.0f)-0.5f) * j * currentAnim.mathA * (1+currentAnim.chaos*0.1f);
             float dy = ((random(0,100)/100.0f)-0.5f) * j * currentAnim.mathB * (1+currentAnim.chaos*0.1f);
             rgb_t col = getColor(j*25);
-            hub75_draw_circle(i*cellW + dx + cellW/2, j*cellH + dy + cellH/2, fmax(1, (cellW-4)/2 * fmax(0.1f, currentAnim.mathC)), col);
+            drawShape(i*cellW + dx + cellW/2, j*cellH + dy + cellH/2, fmax(1, (cellW-4)/2 * fmax(0.1f, currentAnim.mathC)), false, 1.0f, col);
         }
     }
 }
@@ -696,7 +695,7 @@ void SuperArtEngine::drawFidenza() {
         float baseW = currentAnim.mathC * 5;
         float varW = fastSin(p.x * 0.05f)*4 * currentAnim.mathD;
         float w = fmax(1, baseW + varW);
-        hub75_fill_circle(p.x, p.y, w, col);
+        drawShape(p.x, p.y, w, true, 1.0f, col);
     }
 }
 
@@ -770,7 +769,7 @@ void SuperArtEngine::drawAnadol() {
         c.r = (c.r * (int)(0.3f * currentAnim.mathD * 255)) >> 8;
         c.g = (c.g * (int)(0.3f * currentAnim.mathD * 255)) >> 8;
         c.b = (c.b * (int)(0.3f * currentAnim.mathD * 255)) >> 8;
-        hub75_fill_circle(p.x, p.y, rad, c);
+        drawShape(p.x, p.y, rad, true, 0.3f * currentAnim.mathD, c);
     }
 }
 
