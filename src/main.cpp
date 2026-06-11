@@ -65,7 +65,7 @@ void loop() {
 
     // Limit frame rate
     unsigned long now = millis();
-    if (now - last_frame < 33) { // ~30 FPS
+    if (now - last_frame < 16) { // ~60 FPS
         delay(1);
         return;
     }

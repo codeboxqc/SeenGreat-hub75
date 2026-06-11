@@ -108,16 +108,20 @@ void SuperArtEngine::initPalettes() {
 }
 
 float SuperArtEngine::fastSin(float x) {
+    float t = fmod(x, M_PI * 2.0f);
+    if (t < 0) t += M_PI * 2.0f;
     const float LUT_SCALE = LUT_SIZE / (M_PI * 2.0f);
-    int index = (int)(x * LUT_SCALE) % LUT_SIZE;
-    if (index < 0) index += LUT_SIZE;
+    int index = (int)(t * LUT_SCALE);
+    if (index >= LUT_SIZE) index = 0;
     return sinLUT[index];
 }
 
 float SuperArtEngine::fastCos(float x) {
+    float t = fmod(x, M_PI * 2.0f);
+    if (t < 0) t += M_PI * 2.0f;
     const float LUT_SCALE = LUT_SIZE / (M_PI * 2.0f);
-    int index = (int)(x * LUT_SCALE) % LUT_SIZE;
-    if (index < 0) index += LUT_SIZE;
+    int index = (int)(t * LUT_SCALE);
+    if (index >= LUT_SIZE) index = 0;
     return cosLUT[index];
 }
 
