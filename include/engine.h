@@ -69,10 +69,57 @@ private:
     };
     Palette palettes[40];
 
-    std::vector<Particle> particles;
-    std::vector<std::vector<int>> grid;
+    // Fix 7: flat 1D grid — single pointer offset instead of two pointer dereferences,
+    // much more cache-friendly for the tight GoL neighbour scan.
+    static const int MAX_GRID_COLS = 32; // width/2 at min 2px/cell on 64px display
+    static const int MAX_GRID_ROWS = 32;
+    int grid[MAX_GRID_COLS * MAX_GRID_ROWS];
+    int gridCols = 0;
+    int gridRows = 0;
+
     std::vector<Peg> pegs;
     String lSystemString;
+
+    // Fix 8: pre-baked L-system segment list — computed once in resetState,
+    // re-used every frame. Eliminates per-frame trig and stack allocation in drawLSystem.
+    struct LSegment { float x0, y0, x1, y1; int colorIdx; };
+    static const int MAX_LSEG = 2048;
+    LSegment lSystemSegments[MAX_LSEG];
+    int lSystemSegCount = 0;
+
+    static const int MAX_PARTICLES = 1000;
+    Particle particles[MAX_PARTICLES];
+    int particleCount = 0;
+
+    // Vignette mask for drawPassersby — precomputed in resetState()
+    static const int MAX_PIXELS = 64 * 64; // max display size
+    bool vignetteOutside[MAX_PIXELS];
+
+    // Per-config precomputed constants — derived once in resetState(), used every frame.
+    // Avoids re-evaluating the same config-derived expressions in hot draw loops.
+    struct PrecomputedConfig {
+        // Scale factors (config-independent but cheap; stored for consistency)
+        float scaleX, scaleY, scale; // width/V_WIDTH, height/V_HEIGHT, min(scaleX,scaleY)
+        // getColor hot path
+        int   safePalette;           // currentAnim.palette % 40
+        float colorSpeedX50;         // colorSpeed * 50.0f  — multiplied by time each frame
+        // drawShape hot path
+        float mathD_shape;           // mathD * 0.2f + 0.8f  — size multiplier
+        // NeuralMorph / Boids
+        float maxDist;               // 50 * mathA * mathB
+        float sepDist, alignDist, cohDist; // boid distances
+        // Plasma
+        float sinCThresh;            // fastSin(mathC) precomputed — constant in drawPlotter
+        // Fidenza / Anadol
+        float alphaAnadol;           // 0.3f * mathD * 255.0f  — Anadol alpha byte
+        // Substrate line threshold
+        float substrateLinkDist;     // 30 * mathC
+        // Squiggle
+        float squiggleAmp;           // mathD * 10
+        // Ringers chaos offset
+        float ringersChaos;          // chaos * 2
+    } pc;
+    void precompute(); // called at end of resetState()
 
     void initLUT();
     void initPalettes();

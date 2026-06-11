@@ -30,6 +30,7 @@ static uint8_t *draw_buffer = framebuffer_a;
 static uint8_t *display_buffer = framebuffer_b;
 
 static uint8_t brightness = DEFAULT_BRIGHTNESS;
+static uint8_t brightnessLUT[256];
 int camera_x = 0, camera_y = 0;
 
 // ==================== Gamma LUT (2.2) ====================
@@ -193,6 +194,9 @@ static inline void latch_data() {
 
 // ==================== System Init ====================
 void hub75_init(void) {
+    // Initialize brightness LUT default
+    hub75_set_brightness(DEFAULT_BRIGHTNESS);
+    
     // Overclock to 300 MHz (RP2350 / Pico 2 safe)
     set_sys_clock_khz(300000, true);
 
@@ -219,13 +223,6 @@ void hub75_init(void) {
 
 void hub75_set_camera(int x, int y) { camera_x = x; camera_y = y; }
 void hub75_clear(void) { memset(draw_buffer, 0, FB_SIZE); }
-
-// ==================== Pre‑scale Brightness on Display Buffer ====================
-static void pre_scale_brightness(void) {
-    for (int i = 0; i < FB_SIZE; i++) {
-        display_buffer[i] = (display_buffer[i] * brightness) >> 8;
-    }
-}
 
 // ==================== Core Drawing (with clipping) ====================
 void hub75_fill(rgb_t color) {
@@ -598,7 +595,15 @@ static rgb_t apply_hue_shift(rgb_t c) {
  
 
 // ==================== Brightness ====================
-void hub75_set_brightness(uint8_t b) { brightness = b; }
+void hub75_set_brightness(uint8_t b) { 
+    if (!gamma_init) init_gamma();
+    brightness = b; 
+    for (int i = 0; i < 256; i++) {
+        // Apply gamma correction then brightness scaling for 16-million true colors rendering
+        uint8_t gamma_val = gamma_lut[i];
+        brightnessLUT[i] = (gamma_val * b) >> 8;
+    }
+}
 
 // ==================== Optimised Refresh (8‑bit, register writes, loop unrolled) ====================
 // OE times in microseconds – tuned for a typical 64×64 panel at 300 MHz
@@ -617,13 +622,13 @@ void hub75_refresh(void) {
                     int idx_top = (row * TOTAL_WIDTH + (x + k)) * 3;
                     int idx_bot = ((row + half) * TOTAL_WIDTH + (x + k)) * 3;
 
-                    // Values already gamma‑corrected and brightness‑scaled
-                    uint8_t r1 = display_buffer[idx_top + 0];
-                    uint8_t g1 = display_buffer[idx_top + 1];
-                    uint8_t b1 = display_buffer[idx_top + 2];
-                    uint8_t r2 = display_buffer[idx_bot + 0];
-                    uint8_t g2 = display_buffer[idx_bot + 1];
-                    uint8_t b2 = display_buffer[idx_bot + 2];
+                    // Values apply brightness scaling dynamically via LUT
+                    uint8_t r1 = brightnessLUT[display_buffer[idx_top + 0]];
+                    uint8_t g1 = brightnessLUT[display_buffer[idx_top + 1]];
+                    uint8_t b1 = brightnessLUT[display_buffer[idx_top + 2]];
+                    uint8_t r2 = brightnessLUT[display_buffer[idx_bot + 0]];
+                    uint8_t g2 = brightnessLUT[display_buffer[idx_bot + 1]];
+                    uint8_t b2 = brightnessLUT[display_buffer[idx_bot + 2]];
 
                     uint32_t out = 0;
                     if ((r1 >> bit) & 1) out |= R1_MASK;
@@ -656,8 +661,42 @@ void hub75_swap_buffers(void) {
     uint8_t *temp = draw_buffer;
     draw_buffer = display_buffer;
     display_buffer = temp;
-    // After swapping, pre‑scale brightness (and optionally gamma) on the new display buffer
-    pre_scale_brightness();
+}
+
+// Dim every pixel in the draw buffer toward black by (1-keepFactor/255).
+// keepFactor=0: full black; keepFactor=255: unchanged.
+// Used to implement JS-style rgba(0,0,0,fade) trail effect.
+void hub75_dim_buffer(uint8_t keepFactor) {
+    // Process 4 bytes at a time using uint32_t reads.
+    // The trick: (byte * k) >> 8 on all 4 bytes simultaneously.
+    // 0x7F7F7F7F mask strips the carry bleed between byte lanes after the >> 1 shift.
+    // For keepFactor == 128 (exact half) we can use a pure shift — no multiply at all.
+    // For other values we fall back to the multiply path but still do 4 bytes per iteration.
+    int total = TOTAL_WIDTH * TOTAL_HEIGHT * 3; // 12288 bytes for 64x64
+    uint32_t* buf32 = (uint32_t*)draw_buffer;
+    int words = total / 4;           // 3072 words — ~4× fewer loop iterations
+    int tail  = total & 3;           // 0 for 64x64 (12288 is divisible by 4)
+
+    if (keepFactor == 128) {
+        // Exact half: pure right-shift, no multiply, no carry bleed
+        for (int i = 0; i < words; i++)
+            buf32[i] = (buf32[i] >> 1) & 0x7F7F7F7Fu;
+    } else {
+        // General case: still 4× fewer iterations than byte loop
+        for (int i = 0; i < words; i++) {
+            uint32_t w = buf32[i];
+            // Extract and scale each byte lane independently
+            uint32_t b0 = ((w & 0x000000FFu) * keepFactor) >> 8;
+            uint32_t b1 = ((w & 0x0000FF00u) >> 8) * keepFactor >> 8;
+            uint32_t b2 = ((w & 0x00FF0000u) >> 16) * keepFactor >> 8;
+            uint32_t b3 = ((w & 0xFF000000u) >> 24) * keepFactor >> 8;
+            buf32[i] = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+        }
+    }
+    // Handle any leftover bytes (0 for 64x64, but safe for other panel sizes)
+    uint8_t* tail_ptr = draw_buffer + (words * 4);
+    for (int i = 0; i < tail; i++)
+        tail_ptr[i] = ((uint16_t)tail_ptr[i] * keepFactor) >> 8;
 }
 
 // ==================== HSV Helper ====================

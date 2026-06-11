@@ -40,6 +40,7 @@ void hub75_init(void);
 void hub75_set_brightness(uint8_t brightness);
 void hub75_refresh(void);
 void hub75_swap_buffers(void);
+void hub75_dim_buffer(uint8_t keepFactor); // Dim all pixels toward black for trail-fade effect
 
 // Camera offset
 extern int camera_x;
