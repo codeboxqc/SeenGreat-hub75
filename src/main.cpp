@@ -3,37 +3,11 @@
 #include "config.h"
 #include "hub75_driver.h"
 #include "engine.h"
+#include "token.h"
 
 SuperArtEngine* engine;
 unsigned long animationStartTime = 0;
 bool engine_ready = false;
-
-const char* jsonConfig = R"=====(
-{
-    "id": 313,
-    "name": "Hyper Matrix 313",
-    "algo": 24,
-    "palette": 4,
-    "lightFx": 95,
-    "shape": 50,
-    "particleType": 69,
-    "symmetry": 0,
-    "colorSpeed": 0.6,
-    "bpm": 182,
-    "playDuration": 45,
-    "chaos": 9.514,
-    "speed": 2.653,
-    "density": 10,
-    "complexity": 2.761,
-    "trailFade": 0.496,
-    "mathA": 1.924,
-    "mathB": 1.702,
-    "mathC": 6.619,
-    "mathD": 4.27,
-    "mathE": 1.587,
-    "mathF": 1.416
-}
-)=====";
 
 ArtConfig parseConfig(const char* jsonStr) {
     StaticJsonDocument<1024> doc;
@@ -80,11 +54,8 @@ void setup() {
     randomSeed(micros());
 
     engine = new SuperArtEngine(TOTAL_WIDTH, TOTAL_HEIGHT);
-    ArtConfig initialConfig = parseConfig(jsonConfig);
-    engine->loadConfig(initialConfig);
+    token_init();
     
-    animationStartTime = millis();
-
     Serial.println("Super Art Engine Started");
     engine_ready = true; 
 }
@@ -105,12 +76,7 @@ void loop() {
 
     hub75_swap_buffers();
     
-    // Check playDuration to implement some sort of logic (for now, simply logging)
-    // You could replace engine config randomly here similar to autoPlay
-    if (millis() - animationStartTime > engine->getCurrentAnim().playDuration * 1000UL) {
-        Serial.println("Animation playDuration reached.");
-        animationStartTime = millis(); // restart loop
-    }
+    token_update();
 }
 
 void setup1() {}
