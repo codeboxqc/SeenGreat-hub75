@@ -60,12 +60,12 @@ rgb_t hub75_get_pixel(int x, int y);
 // Primitives
 void hub75_draw_hline(int x, int y, int width, rgb_t color);
 void hub75_draw_vline(int x, int y, int height, rgb_t color);
-void hub75_draw_line(int x0, int y0, int x1, int y1, rgb_t color);
-void hub75_draw_rect(int x, int y, int width, int height, rgb_t color);
-void hub75_fill_rect(int x, int y, int width, int height, rgb_t color);
-void hub75_draw_circle(int cx, int cy, int radius, rgb_t color);
-void hub75_fill_circle(int cx, int cy, int radius, rgb_t color);
-void hub75_draw_triangle(int x0, int y0, int x1, int y1, int x2, int y2, rgb_t color);
+void hub75_draw_line(float x0, float y0, float x1, float y1, rgb_t color);
+void hub75_draw_rect(float x, float y, float width, float height, rgb_t color);
+void hub75_fill_rect(float x, float y, float width, float height, rgb_t color);
+void hub75_draw_circle(float cx, float cy, float radius, rgb_t color);
+void hub75_fill_circle(float cx, float cy, float radius, rgb_t color);
+void hub75_draw_triangle(float x0, float y0, float x1, float y1, float x2, float y2, rgb_t color);
 
 void hub75_draw_rounded_rect(int x, int y, int w, int h, int radius, rgb_t color);
 void hub75_fill_rounded_rect(int x, int y, int w, int h, int radius, rgb_t color);
@@ -84,19 +84,19 @@ int hub75_string_width(const char *str, int size);
 void hub75_draw_image(int x, int y, const uint16_t *bitmap, int w, int h);
 void hub75_draw_sprite(int x, int y, const uint16_t *bitmap, int w, int h, uint16_t transparent_color);
 
- 
- 
+
+
 
 // Scrolling
 void hub75_scroll(int dx, int dy);
 
- 
-void hub75_enable_dithering(bool enable);
- 
 
- 
+void hub75_enable_dithering(bool enable);
+
+
+
 void hub75_set_hue_shift(uint16_t hue_shift);
- 
+
 
 // Helpers
 rgb_t hsv_to_rgb(uint16_t hue, uint8_t sat, uint8_t val);

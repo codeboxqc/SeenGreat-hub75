@@ -273,123 +273,103 @@ void hub75_draw_hline(int x, int y, int width, rgb_t color) {
 void hub75_draw_vline(int x, int y, int height, rgb_t color) {
     for (int i = 0; i < height; i++) hub75_set_pixel(x, y + i, color);
 }
-inline float fpart(float x) {
-    return x - floor(x);
+inline float distToSegment(float px, float py, float x0, float y0, float x1, float y1) {
+    float l2 = (x1 - x0)*(x1 - x0) + (y1 - y0)*(y1 - y0);
+    if (l2 == 0.0f) return hypot(px - x0, py - y0);
+    float t = fmax(0.0f, fmin(1.0f, ((px - x0)*(x1 - x0) + (py - y0)*(y1 - y0)) / l2));
+    float projx = x0 + t * (x1 - x0);
+    float projy = y0 + t * (y1 - y0);
+    return hypot(px - projx, py - projy);
 }
 
-inline float rfpart(float x) {
-    return 1.0f - fpart(x);
-}
+void hub75_draw_line(float x0, float y0, float x1, float y1, rgb_t color) {
+    int minX = floor(fmin(x0, x1) - 1);
+    int maxX = ceil(fmax(x0, x1) + 1);
+    int minY = floor(fmin(y0, y1) - 1);
+    int maxY = ceil(fmax(y0, y1) + 1);
 
-void hub75_draw_line(int x0, int y0, int x1, int y1, rgb_t color) {
-    bool steep = abs(y1 - y0) > abs(x1 - x0);
-    if (steep) {
-        int tmp = x0; x0 = y0; y0 = tmp;
-        tmp = x1; x1 = y1; y1 = tmp;
-    }
-    if (x0 > x1) {
-        int tmp = x0; x0 = x1; x1 = tmp;
-        tmp = y0; y0 = y1; y1 = tmp;
-    }
-
-    float dx = x1 - x0;
-    float dy = y1 - y0;
-    float gradient = dx == 0.0f ? 1.0f : dy / dx;
-
-    int xend = round(x0);
-    float yend = y0 + gradient * (xend - x0);
-    float xgap = rfpart(x0 + 0.5f);
-    int xpxl1 = xend;
-    int ypxl1 = floor(yend);
-
-    if (steep) {
-        hub75_blend_pixel(ypxl1, xpxl1, color, rfpart(yend) * xgap * 255);
-        hub75_blend_pixel(ypxl1 + 1, xpxl1, color, fpart(yend) * xgap * 255);
-    } else {
-        hub75_blend_pixel(xpxl1, ypxl1, color, rfpart(yend) * xgap * 255);
-        hub75_blend_pixel(xpxl1, ypxl1 + 1, color, fpart(yend) * xgap * 255);
-    }
-    float intery = yend + gradient;
-
-    xend = round(x1);
-    yend = y1 + gradient * (xend - x1);
-    xgap = fpart(x1 + 0.5f);
-    int xpxl2 = xend;
-    int ypxl2 = floor(yend);
-
-    if (steep) {
-        hub75_blend_pixel(ypxl2, xpxl2, color, rfpart(yend) * xgap * 255);
-        hub75_blend_pixel(ypxl2 + 1, xpxl2, color, fpart(yend) * xgap * 255);
-    } else {
-        hub75_blend_pixel(xpxl2, ypxl2, color, rfpart(yend) * xgap * 255);
-        hub75_blend_pixel(xpxl2, ypxl2 + 1, color, fpart(yend) * xgap * 255);
-    }
-
-    if (steep) {
-        for (int x = xpxl1 + 1; x <= xpxl2 - 1; x++) {
-            hub75_blend_pixel(floor(intery), x, color, rfpart(intery) * 255);
-            hub75_blend_pixel(floor(intery) + 1, x, color, fpart(intery) * 255);
-            intery = intery + gradient;
-        }
-    } else {
-        for (int x = xpxl1 + 1; x <= xpxl2 - 1; x++) {
-            hub75_blend_pixel(x, floor(intery), color, rfpart(intery) * 255);
-            hub75_blend_pixel(x, floor(intery) + 1, color, fpart(intery) * 255);
-            intery = intery + gradient;
+    for (int y = minY; y <= maxY; y++) {
+        for (int x = minX; x <= maxX; x++) {
+            float dist = distToSegment(x + 0.5f, y + 0.5f, x0, y0, x1, y1);
+            if (dist <= 0.5f) {
+                hub75_set_pixel(x, y, color);
+            } else if (dist <= 1.0f) {
+                float alpha = (1.0f - dist) * 2.0f;
+                hub75_blend_pixel(x, y, color, alpha * 255);
+            }
         }
     }
 }
-void hub75_draw_rect(int x, int y, int width, int height, rgb_t color) {
-    hub75_draw_hline(x, y, width, color);
-    hub75_draw_hline(x, y + height - 1, width, color);
-    hub75_draw_vline(x, y, height, color);
-    hub75_draw_vline(x + width - 1, y, height, color);
+void hub75_draw_rect(float x, float y, float width, float height, rgb_t color) {
+    hub75_draw_line(x, y, x + width, y, color);
+    hub75_draw_line(x + width, y, x + width, y + height, color);
+    hub75_draw_line(x + width, y + height, x, y + height, color);
+    hub75_draw_line(x, y + height, x, y, color);
 }
-void hub75_fill_rect(int x, int y, int width, int height, rgb_t color) {
-    int sx = x - camera_x;
-    int sy = y - camera_y;
-    if (sx >= TOTAL_WIDTH || sy >= TOTAL_HEIGHT || sx + width <= 0 || sy + height <= 0) return;
-    int start_x = max(0, sx);
-    int start_y = max(0, sy);
-    int end_x = min((int)TOTAL_WIDTH, sx + width);
-    int end_y = min((int)TOTAL_HEIGHT, sy + height);
-    for (int j = start_y; j < end_y; j++) {
-        int row_off = j * TOTAL_WIDTH;
-        for (int i = start_x; i < end_x; i++) {
-            if (is_clipped(i, j)) continue;
-            int idx = (row_off + i) * 3;
-            draw_buffer[idx + 0] = color.r;
-            draw_buffer[idx + 1] = color.g;
-            draw_buffer[idx + 2] = color.b;
+void hub75_fill_rect(float rx, float ry, float w, float h, rgb_t color) {
+    int minX = floor(rx - 1);
+    int maxX = ceil(rx + w + 1);
+    int minY = floor(ry - 1);
+    int maxY = ceil(ry + h + 1);
+
+    for (int py = minY; py <= maxY; py++) {
+        for (int px = minX; px <= maxX; px++) {
+            float p_cx = px + 0.5f;
+            float p_cy = py + 0.5f;
+
+            float dx = fmax(0.0f, fmax(rx - p_cx, p_cx - (rx + w)));
+            float dy = fmax(0.0f, fmax(ry - p_cy, p_cy - (ry + h)));
+            float dist = hypot(dx, dy);
+
+            if (dist <= 0.0f) {
+                hub75_set_pixel(px, py, color);
+            } else if (dist <= 1.0f) {
+                float alpha = 1.0f - dist;
+                hub75_blend_pixel(px, py, color, alpha * 255);
+            }
         }
     }
 }
-void hub75_draw_circle(int cx, int cy, int radius, rgb_t color) {
-    for (int dy = -radius - 1; dy <= radius + 1; dy++) {
-        for (int dx = -radius - 1; dx <= radius + 1; dx++) {
-            float dist = sqrt(dx*dx + dy*dy);
+void hub75_draw_circle(float cx, float cy, float radius, rgb_t color) {
+    int minX = floor(cx - radius - 1);
+    int maxX = ceil(cx + radius + 1);
+    int minY = floor(cy - radius - 1);
+    int maxY = ceil(cy + radius + 1);
+
+    for (int y = minY; y <= maxY; y++) {
+        for (int x = minX; x <= maxX; x++) {
+            float dist = hypot(x + 0.5f - cx, y + 0.5f - cy);
             float diff = fabs(dist - radius);
-            if (diff <= 1.0f) {
-                float alpha = 1.0f - diff;
-                hub75_blend_pixel(cx + dx, cy + dy, color, alpha * 255);
+            if (diff <= 0.5f) {
+                hub75_set_pixel(x, y, color);
+            } else if (diff <= 1.0f) {
+                float alpha = (1.0f - diff) * 2.0f;
+                hub75_blend_pixel(x, y, color, alpha * 255);
             }
         }
     }
 }
-void hub75_fill_circle(int cx, int cy, int radius, rgb_t color) {
-    for (int dy = -radius - 1; dy <= radius + 1; dy++) {
-        for (int dx = -radius - 1; dx <= radius + 1; dx++) {
-            float dist = sqrt(dx*dx + dy*dy);
-            if (dist <= radius) {
-                hub75_set_pixel(cx + dx, cy + dy, color);
-            } else if (dist <= radius + 1.0f) {
-                float alpha = 1.0f - (dist - radius);
-                hub75_blend_pixel(cx + dx, cy + dy, color, alpha * 255);
+void hub75_fill_circle(float cx, float cy, float radius, rgb_t color) {
+    int minX = floor(cx - radius - 1);
+    int maxX = ceil(cx + radius + 1);
+    int minY = floor(cy - radius - 1);
+    int maxY = ceil(cy + radius + 1);
+
+    for (int y = minY; y <= maxY; y++) {
+        for (int x = minX; x <= maxX; x++) {
+            float dist = hypot(x + 0.5f - cx, y + 0.5f - cy);
+            if (dist <= radius - 0.5f) {
+                hub75_set_pixel(x, y, color);
+            } else if (dist <= radius + 0.5f) {
+                float alpha = 0.5f + (radius - dist);
+                if (alpha < 0) alpha = 0;
+                if (alpha > 1) alpha = 1;
+                hub75_blend_pixel(x, y, color, alpha * 255);
             }
         }
     }
 }
-void hub75_draw_triangle(int x0, int y0, int x1, int y1, int x2, int y2, rgb_t color) {
+void hub75_draw_triangle(float x0, float y0, float x1, float y1, float x2, float y2, rgb_t color) {
     hub75_draw_line(x0, y0, x1, y1, color);
     hub75_draw_line(x1, y1, x2, y2, color);
     hub75_draw_line(x2, y2, x0, y0, color);
