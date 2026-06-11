@@ -331,13 +331,41 @@ void SuperArtEngine::updateNeuralMorph() { updateFlowFields(); }
 void SuperArtEngine::drawShape(float x, float y, float size, bool fill, float alpha, rgb_t c) {
     int shapeID = currentAnim.shape;
     int cat = shapeID % 10;
+    int mod = shapeID / 10;
     float s = fmax(0.5f, size * (currentAnim.mathD * 0.2f + 0.8f));
     
+    // In JS it has a translate/rotate, but we can't easily do arbitrary rotate without a framebuffer.
+    // At minimum we should support the different categories.
+    // JS categories:
+    // 0: circle
+    // 1: rect
+    // 2: triangle (approximate with rect or points if we can't)
+    // 3: star (approximate)
+    // 4: polygon (approximate)
+    // 5: rings
+    // 6: cross
+    // 7: flowy blob
+
+    // We only have hub75_fill_circle, hub75_fill_rect, hub75_draw_circle, hub75_draw_rect, hub75_draw_line
     if (fill) {
         if (cat == 0) {
             hub75_fill_circle(x, y, s, c);
         } else if (cat == 1) {
-            hub75_fill_rect(x - s, y - s, s * 2, s * 2, c);
+            hub75_fill_rect(x - s, y - s, s * 2, s * (mod > 5 ? 1 : 2), c);
+        } else if (cat == 2) {
+            hub75_draw_line(x, y - s, x + s, y + s, c);
+            hub75_draw_line(x + s, y + s, x - s, y + s, c);
+            hub75_draw_line(x - s, y + s, x, y - s, c);
+        } else if (cat == 3) {
+            hub75_fill_circle(x, y, s, c); // Approximate star
+        } else if (cat == 4) {
+            hub75_fill_circle(x, y, s, c);
+        } else if (cat == 5) {
+            hub75_draw_circle(x, y, s, c);
+            hub75_draw_circle(x, y, s/2, c);
+        } else if (cat == 6) {
+            hub75_draw_line(x - s, y, x + s, y, c);
+            hub75_draw_line(x, y - s, x, y + s, c);
         } else {
             hub75_fill_circle(x, y, s, c);
         }
@@ -345,7 +373,17 @@ void SuperArtEngine::drawShape(float x, float y, float size, bool fill, float al
         if (cat == 0) {
             hub75_draw_circle(x, y, s, c);
         } else if (cat == 1) {
-            hub75_draw_rect(x - s, y - s, s * 2, s * 2, c);
+            hub75_draw_rect(x - s, y - s, s * 2, s * (mod > 5 ? 1 : 2), c);
+        } else if (cat == 2) {
+            hub75_draw_line(x, y - s, x + s, y + s, c);
+            hub75_draw_line(x + s, y + s, x - s, y + s, c);
+            hub75_draw_line(x - s, y + s, x, y - s, c);
+        } else if (cat == 5) {
+            hub75_draw_circle(x, y, s, c);
+            hub75_draw_circle(x, y, s/2, c);
+        } else if (cat == 6) {
+            hub75_draw_line(x - s, y, x + s, y, c);
+            hub75_draw_line(x, y - s, x, y + s, c);
         } else {
             hub75_draw_circle(x, y, s, c);
         }
