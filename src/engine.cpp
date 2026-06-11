@@ -1,6 +1,25 @@
 #include "engine.h"
 #include <math.h>
 
+// Virtual resolution to sync physics parity with the 256x256 JS simulator
+const float V_WIDTH = 256.0f;
+const float V_HEIGHT = 256.0f;
+
+// Sharp, 1-pixel thin line algorithm (Bresenham) to replace anti-aliased glowing lines
+static void drawThinLine(int x0, int y0, int x1, int y1, rgb_t color) {
+    int dx = abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    int dy = -abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    int err = dx + dy, e2;
+
+    while (true) {
+        hub75_set_pixel(x0, y0, color);
+        if (x0 == x1 && y0 == y1) break;
+        e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x0 += sx; }
+        if (e2 <= dx) { err += dx; y0 += sy; }
+    }
+}
+
 const rgb_t basePalettes[40][5] = {
     { {255,0,0}, {255,127,0}, {255,255,0}, {255,0,255}, {255,255,255} }, // Plasma
     { {0,255,255}, {0,136,255}, {0,0,255}, {255,255,255}, {136,204,255} }, // Ice
@@ -133,8 +152,8 @@ void SuperArtEngine::resetState() {
     if (algo == 2 || algo == 5 || algo == 7 || algo == 11 || algo == 13 || algo == 16 || algo == 20 || algo == 21 || algo == 22 || algo == 24) {
         for (int i = 0; i < density; i++) {
             Particle p;
-            p.x = random(0, width * 100) / 100.0f;
-            p.y = random(0, height * 100) / 100.0f;
+            p.x = random(0, V_WIDTH * 100) / 100.0f;
+            p.y = random(0, V_HEIGHT * 100) / 100.0f;
             p.vx = (random(0, 200) / 100.0f - 1.0f) * 2.0f;
             p.vy = (random(0, 200) / 100.0f - 1.0f) * 2.0f;
             p.life = random(0, 100);
@@ -158,8 +177,8 @@ void SuperArtEngine::resetState() {
         for (int i = 1; i <= cols; i++) {
             for (int j = 1; j <= cols; j++) {
                 Peg p;
-                p.x = ((float)i / (cols + 1)) * width;
-                p.y = ((float)j / (cols + 1)) * height;
+                p.x = ((float)i / (cols + 1)) * V_WIDTH;
+                p.y = ((float)j / (cols + 1)) * V_HEIGHT;
                 p.active = random(0, 100) > 30;
                 pegs.push_back(p);
             }
@@ -235,8 +254,8 @@ void SuperArtEngine::updateSubstrate() {
         p.x += p.vx;
         p.y += p.vy;
         if ((random(0, 1000) / 1000.0f) < seedChance) {
-            p.x = random(0, width);
-            p.y = random(0, height);
+            p.x = random(0, V_WIDTH * 100) / 100.0f;
+            p.y = random(0, V_HEIGHT * 100) / 100.0f;
         }
     }
 }
@@ -260,13 +279,13 @@ void SuperArtEngine::updateFlowFields() {
         } else if (pt == 2) {
             p.vy += 0.1f * currentAnim.speed;
             p.vx += ((random(0,100)/100.0f)-0.5f) * chaos * 0.1f;
-            if (p.y > height) { p.vy *= -0.8f; p.y = height; }
+            if (p.y > V_HEIGHT) { p.vy *= -0.8f; p.y = V_HEIGHT; }
         }
         p.x += p.vx; p.y += p.vy;
-        if (p.x < 0) p.x += width;
-        if (p.x > width) p.x -= width;
-        if (p.y < 0) p.y += height;
-        if (p.y > height) p.y -= height;
+        if (p.x < 0) p.x += V_WIDTH;
+        if (p.x > V_WIDTH) p.x -= V_WIDTH;
+        if (p.y < 0) p.y += V_HEIGHT;
+        if (p.y > V_HEIGHT) p.y -= V_HEIGHT;
     }
 }
 
@@ -319,36 +338,76 @@ void SuperArtEngine::updateAIBoids() {
         }
         
         p.x += p.vx; p.y += p.vy;
-        if (p.x < 0) p.x += width;
-        if (p.x > width) p.x -= width;
-        if (p.y < 0) p.y += height;
-        if (p.y > height) p.y -= height;
+        if (p.x < 0) p.x += V_WIDTH;
+        if (p.x > V_WIDTH) p.x -= V_WIDTH;
+        if (p.y < 0) p.y += V_HEIGHT;
+        if (p.y > V_HEIGHT) p.y -= V_HEIGHT;
     }
 }
 
 void SuperArtEngine::updateNeuralMorph() { updateFlowFields(); }
 
-void SuperArtEngine::drawShape(float x, float y, float size, bool fill, float alpha) {
+void SuperArtEngine::drawShape(float x, float y, float size, bool fill, float alpha, rgb_t c) {
     int shapeID = currentAnim.shape;
     int cat = shapeID % 10;
-    float s = fmax(0.5f, size * (currentAnim.mathD * 0.2f + 0.8f));
-    rgb_t c = getColor(0); // Default color if not explicitly provided by algorithm
-    
+    int mod = shapeID / 10;
+    float s = size * (currentAnim.mathD * 0.2f + 0.8f);
+
+    // Sub-pixel or exactly 1 pixel fallback for fine dust
+    if (s <= 0.6f) {
+        hub75_set_pixel(x, y, c);
+        return;
+    }
+
+    int radius = round(s);
+    if (radius < 1) radius = 1;
+
     if (fill) {
-        if (cat == 0) {
-            hub75_fill_circle(x, y, s, c);
+        if (cat == 0 || cat == 3 || cat == 4 || cat == 7) {
+            if (radius == 1) {
+                // To keep small shapes looking sharp instead of turning into 3x3 circles
+                hub75_fill_rect(x, y, 2, 2, c);
+            } else {
+                hub75_fill_circle(x, y, radius, c);
+            }
         } else if (cat == 1) {
-            hub75_fill_rect(x - s, y - s, s * 2, s * 2, c);
+            hub75_fill_rect(x - radius, y - radius, radius * 2, radius * (mod > 5 ? 1 : 2), c);
+        } else if (cat == 2) {
+            drawThinLine(x, y - radius, x + radius, y + radius, c);
+            drawThinLine(x + radius, y + radius, x - radius, y + radius, c);
+            drawThinLine(x - radius, y + radius, x, y - radius, c);
+        } else if (cat == 5) {
+            if (radius == 1) hub75_set_pixel(x, y, c);
+            else {
+                hub75_draw_circle(x, y, radius, c);
+                hub75_draw_circle(x, y, radius/2, c);
+            }
+        } else if (cat == 6) {
+            drawThinLine(x - radius, y, x + radius, y, c);
+            drawThinLine(x, y - radius, x, y + radius, c);
         } else {
-            hub75_fill_circle(x, y, s, c);
+            if (radius == 1) hub75_fill_rect(x, y, 2, 2, c);
+            else hub75_fill_circle(x, y, radius, c);
         }
     } else {
-        if (cat == 0) {
-            hub75_draw_circle(x, y, s, c);
+        if (cat == 0 || cat == 3 || cat == 4 || cat == 7) {
+            if (radius == 1) hub75_draw_rect(x, y, 2, 2, c);
+            else hub75_draw_circle(x, y, radius, c);
         } else if (cat == 1) {
-            hub75_draw_rect(x - s, y - s, s * 2, s * 2, c);
+            hub75_draw_rect(x - radius, y - radius, radius * 2, radius * (mod > 5 ? 1 : 2), c);
+        } else if (cat == 2) {
+            drawThinLine(x, y - radius, x + radius, y + radius, c);
+            drawThinLine(x + radius, y + radius, x - radius, y + radius, c);
+            drawThinLine(x - radius, y + radius, x, y - radius, c);
+        } else if (cat == 5) {
+            hub75_draw_circle(x, y, radius, c);
+            if (radius > 1) hub75_draw_circle(x, y, radius/2, c);
+        } else if (cat == 6) {
+            drawThinLine(x - radius, y, x + radius, y, c);
+            drawThinLine(x, y - radius, x, y + radius, c);
         } else {
-            hub75_draw_circle(x, y, s, c);
+            if (radius == 1) hub75_draw_rect(x, y, 2, 2, c);
+            else hub75_draw_circle(x, y, radius, c);
         }
     }
 }
@@ -360,15 +419,61 @@ void SuperArtEngine::draw() {
     bool clearsFrame = (algo == 1 || algo == 3 || algo == 6 || algo == 8 || algo == 9 || algo == 10 || algo == 12 || algo == 13 || algo == 14 || algo == 15 || algo == 17 || algo == 18 || algo == 19 || algo == 23);
     if (clearsFrame) fade = 1.0f;
     
-    // Simplification for fade: if 1.0, clear. Otherwise, we can simulate fade by drawing a black rect with alpha.
-    // Since hub75 doesn't have native screen alpha fade easily, we can just clear if fade > 0.5 for now,
-    // or rely on blending pixels... We will clear if fade == 1.0f.
     if (fade == 1.0f) {
         hub75_clear();
     }
     
-    // Symmetry is hard without an offscreen buffer. We will just draw base algorithm for now.
     drawAlgorithms(algo);
+
+    // --- ZERO-RAM SYMMETRY POST-PROCESSING ---
+    // Instead of using a heavy off-screen buffer, we copy the pixels 
+    // from the primary quadrants directly on the hardware buffer!
+    int sym = currentAnim.symmetry;
+    
+    if (sym == 1) { // Horizontal
+        for (int y = 0; y < height / 2; y++) {
+            for (int x = 0; x < width; x++) {
+                rgb_t c = hub75_get_pixel(x, y);
+                hub75_set_pixel(x, height - 1 - y, c);
+            }
+        }
+    } 
+    else if (sym == 2) { // Vertical
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width / 2; x++) {
+                rgb_t c = hub75_get_pixel(x, y);
+                hub75_set_pixel(width - 1 - x, y, c);
+            }
+        }
+    } 
+    else if (sym == 3) { // Quad
+        for (int y = 0; y < height / 2; y++) {
+            for (int x = 0; x < width / 2; x++) {
+                rgb_t c = hub75_get_pixel(x, y);
+                hub75_set_pixel(width - 1 - x, y, c);                 // Top Right
+                hub75_set_pixel(x, height - 1 - y, c);                // Bottom Left
+                hub75_set_pixel(width - 1 - x, height - 1 - y, c);    // Bottom Right
+            }
+        }
+    } 
+    else if (sym == 4) { // Kaleidoscope (8 slices)
+        // 1. Diagonal mirror inside the top-left quadrant
+        for (int y = 0; y < height / 2; y++) {
+            for (int x = 0; x <= y; x++) {
+                rgb_t c = hub75_get_pixel(x, y);
+                hub75_set_pixel(y, x, c); 
+            }
+        }
+        // 2. Quad mirror the result
+        for (int y = 0; y < height / 2; y++) {
+            for (int x = 0; x < width / 2; x++) {
+                rgb_t c = hub75_get_pixel(x, y);
+                hub75_set_pixel(width - 1 - x, y, c);                 
+                hub75_set_pixel(x, height - 1 - y, c);                
+                hub75_set_pixel(width - 1 - x, height - 1 - y, c);    
+            }
+        }
+    }
 }
 
 void SuperArtEngine::drawAlgorithms(int algo) {
@@ -403,6 +508,7 @@ void SuperArtEngine::drawGameOfLife() {
     int cols = grid.size();
     if (cols == 0) return;
     int rows = grid[0].size();
+    
     float cellW = (float)width / cols;
     float cellH = (float)height / rows;
     for (int i = 0; i < cols; i++) {
@@ -411,18 +517,19 @@ void SuperArtEngine::drawGameOfLife() {
                 rgb_t c = getColor((i / (float)cols + j / (float)rows) * 128.0f);
                 float cx = i * cellW + cellW / 2.0f;
                 float cy = j * cellH + cellH / 2.0f;
-                hub75_fill_circle(cx, cy, cellW / 2.0f, c);
+                drawShape(cx, cy, cellW / 2.0f, true, 1.0f, c);
             }
         }
     }
 }
 
 void SuperArtEngine::drawMandelbrot() {
+    float scaleX = (float)width / V_WIDTH;
     int maxIter = fmax(10, currentAnim.mathC);
     float zoom = 1.0f + fastSin(time * 0.1f) * 0.5f + currentAnim.mathB;
     float moveX = fastCos(time * 0.2f) * 0.5f + currentAnim.mathD - 5.0f;
     float moveY = fastSin(time * 0.2f) * 0.5f + currentAnim.mathE - 5.0f;
-    int res = 4;
+    int res = fmax(1.0f, 4.0f * scaleX);
     float chaos = currentAnim.chaos * 0.1f;
     for (int x = 0; x < width; x += res) {
         for (int y = 0; y < height; y += res) {
@@ -445,9 +552,12 @@ void SuperArtEngine::drawMandelbrot() {
 }
 
 void SuperArtEngine::drawSubstrate() {
+    float scaleX = (float)width / V_WIDTH;
+    float scaleY = (float)height / V_HEIGHT;
+    
     for (auto& p : particles) {
         rgb_t c = getColor(p.colorIdx);
-        hub75_fill_rect(p.x, p.y, 2, 2, c);
+        hub75_fill_rect(p.x * scaleX, p.y * scaleY, fmax(1.0f, 2*scaleX), fmax(1.0f, 2*scaleY), c);
     }
     for (size_t i = 0; i < particles.size(); i += 10) {
         auto& p1 = particles[i];
@@ -455,12 +565,14 @@ void SuperArtEngine::drawSubstrate() {
         float dist = fastHypot(p1.x - p2.x, p1.y - p2.y);
         if (dist < 30 * currentAnim.mathC) {
             rgb_t c = getColor(p1.colorIdx);
-            hub75_draw_line(p1.x, p1.y, p2.x, p2.y, c);
+            drawThinLine(p1.x * scaleX, p1.y * scaleY, p2.x * scaleX, p2.y * scaleY, c);
         }
     }
 }
 
 void SuperArtEngine::drawFractalFlame() {
+    float scaleX = (float)width / V_WIDTH;
+    float scaleY = (float)height / V_HEIGHT;
     int iters = floor(1000 * currentAnim.density / 100);
     float x = 0, y = 0;
     float a = currentAnim.mathA; float b = currentAnim.mathB; float mC = currentAnim.mathC;
@@ -479,21 +591,20 @@ void SuperArtEngine::drawFractalFlame() {
             nx = x*a - y*a; ny = x*b + y*b;
         }
         x = nx; y = ny;
-        float px = width/2 + x * 20 * currentAnim.complexity;
-        float py = height/2 + y * 20 * currentAnim.complexity;
+        float px = width/2.0f + x * 20 * scaleX * currentAnim.complexity;
+        float py = height/2.0f + y * 20 * scaleY * currentAnim.complexity;
         rgb_t c = getColor(fmod(i, 256) + shift);
         hub75_fill_rect(px, py, 1, 1, c);
     }
 }
 
 void SuperArtEngine::drawLSystem() {
-    // simplified straight drawing because we don't have turtle graphics easily
-    // We will draw it mostly statically or just lines
-    float len = 5 * currentAnim.mathB;
+    float scaleY = (float)height / V_HEIGHT;
+    float len = 5 * currentAnim.mathB * scaleY;
     int cIdx = 0;
-    float cx = width / 2;
+    float cx = width / 2.0f;
     float cy = height;
-    float currentAngle = -M_PI / 2; // facing up
+    float currentAngle = -M_PI / 2.0f; 
     float angleStep = currentAnim.mathA * M_PI + fastSin(time*0.5f)*currentAnim.mathE + (currentAnim.chaos*0.01f);
     
     std::vector<std::pair<float, std::pair<float, float>>> stack;
@@ -504,7 +615,7 @@ void SuperArtEngine::drawLSystem() {
             rgb_t col = getColor(cIdx++);
             float nx = cx + cos(currentAngle) * len;
             float ny = cy + sin(currentAngle) * len;
-            hub75_draw_line(cx, cy, nx, ny, col);
+            drawThinLine(cx, cy, nx, ny, col);
             cx = nx; cy = ny;
         } else if (c == '+') {
             currentAngle += angleStep;
@@ -525,112 +636,130 @@ void SuperArtEngine::drawLSystem() {
 }
 
 void SuperArtEngine::drawParticles() {
+    float scaleX = (float)width / V_WIDTH;
+    float scaleY = (float)height / V_HEIGHT;
+    float scale = fmin(scaleX, scaleY);
     for (auto& p : particles) {
         rgb_t c = getColor(p.colorIdx);
-        hub75_fill_circle(p.x, p.y, 2, c); // using circle as proxy
+        // Removing fmax() allows tiny particles to scale below 1 and trigger the single-pixel logic
+        drawShape(p.x * scaleX, p.y * scaleY, 2.0f * scale, true, 1.0f, c);
     }
 }
 
 void SuperArtEngine::drawPlasma() {
+    float scaleX = (float)width / V_WIDTH;
+    float scaleY = (float)height / V_HEIGHT;
     float a = currentAnim.mathA; float b = currentAnim.mathB; float c = currentAnim.mathC;
     int gridX = fmax(1, floor(4 * currentAnim.mathD));
     int gridY = fmax(1, floor(4 * currentAnim.mathE));
     float chaos = currentAnim.chaos * 0.1f;
-    for (int y = 0; y < height; y += gridY) {
-        for (int x = 0; x < width; x += gridX) {
+    for (int y = 0; y < V_HEIGHT; y += gridY) {
+        for (int x = 0; x < V_WIDTH; x += gridX) {
             float v = fastSin(x*0.01f*a + time) + fastSin(y*0.01f*b + time) + fastSin((x+y)*0.01f*c) + ((random(0,100)/100.0f)*chaos);
             rgb_t col = getColor((v + 3.0f) / 6.0f * 255.0f);
-            hub75_fill_rect(x, y, gridX, gridY, col);
+            hub75_fill_rect(x * scaleX, y * scaleY, fmax(1.0f, gridX * scaleX), fmax(1.0f, gridY * scaleY), col);
         }
     }
 }
 
 void SuperArtEngine::drawNeuralMorph() {
+    float scaleX = (float)width / V_WIDTH;
+    float scaleY = (float)height / V_HEIGHT;
+    float scale = fmin(scaleX, scaleY);
     float a = currentAnim.mathA; float b = currentAnim.mathB;
+    
     for (auto& p : particles) {
         rgb_t c = getColor(p.colorIdx);
-        float s = fmax(0.5f, fabs(fastSin(time + p.x)*5*currentAnim.mathE) + currentAnim.mathD);
-        hub75_fill_circle(p.x, p.y, s, c);
+        float s = fmax(0.5f, fabs(fastSin(time + p.x)*5*currentAnim.mathE) + currentAnim.mathD) * scale;
+        hub75_fill_circle(p.x * scaleX, p.y * scaleY, s, c);
     }
-    float maxDist = 50 * a * b;
+    
+    float maxDist = 50 * a * b; 
     for (size_t i = 0; i < particles.size(); i++) {
         for (size_t j = i + 1; j < particles.size(); j++) {
             auto& p1 = particles[i]; auto& p2 = particles[j];
             float d = fastHypot(p1.x - p2.x, p1.y - p2.y);
             if (d < maxDist) {
                 rgb_t c = getColor(p1.colorIdx);
-                // fake alpha by blending or just draw line
-                hub75_draw_line(p1.x, p1.y, p2.x, p2.y, c);
+                drawThinLine(p1.x * scaleX, p1.y * scaleY, p2.x * scaleX, p2.y * scaleY, c);
             }
         }
     }
 }
 
 void SuperArtEngine::drawPlotter() {
+    float scaleX = (float)width / V_WIDTH;
+    float scaleY = (float)height / V_HEIGHT;
     int step = fmax(5, 40 - currentAnim.density / 25);
     float a = currentAnim.mathA; float b = currentAnim.mathB; float c = currentAnim.mathC;
     float thresh = currentAnim.mathD; float amp = currentAnim.mathE;
-    for (int x = 0; x < width; x += step) {
-        for (int y = 0; y < height; y += step) {
+    
+    for (int x = 0; x < V_WIDTH; x += step) {
+        for (int y = 0; y < V_HEIGHT; y += step) {
             float noise = fastSin(x*a + y*b + time);
             if (noise > fastSin(c) * thresh) {
-                rgb_t col = getColor(((float)x/width)*128.0f + ((float)y/height)*128.0f);
-                hub75_draw_rect(x + noise*5*amp, y, fmax(1, step-2), fmax(1, step-2), col);
+                rgb_t col = getColor(((float)x/V_WIDTH)*128.0f + ((float)y/V_HEIGHT)*128.0f);
+                hub75_draw_rect(x * scaleX + noise*5*amp*scaleX, y * scaleY, fmax(1.0f, (step-2)*scaleX), fmax(1.0f, (step-2)*scaleY), col);
             }
         }
     }
 }
 
 void SuperArtEngine::drawLEDPulse() {
+    float scaleX = (float)width / V_WIDTH;
+    float scaleY = (float)height / V_HEIGHT;
+    float scale = fmin(scaleX, scaleY);
     float a = currentAnim.mathA;
     float b = currentAnim.mathB;
     float c = currentAnim.mathC;
     
-    for (int x = 0; x < width; x += 10) {
-        for (int y = 0; y < height; y += 10) {
+    for (int x = 0; x < V_WIDTH; x += 10) {
+        for (int y = 0; y < V_HEIGHT; y += 10) {
             float pulse = (fastSin(time * a + x * 0.05f * b + y * 0.05f * c) + 1.0f) / 2.0f;
             rgb_t color = getColor(pulse * 255.0f);
             
-            int cx = x + 5;
-            int cy = y + 5;
-            float r = pulse * 4.0f + 1.0f;
+            float cx = x * scaleX + 5 * scaleX;
+            float cy = y * scaleY + 5 * scaleY;
+            float r = (pulse * 4.0f + 1.0f) * scale;
             
-            // For hub75, we can't easily alpha-blend a circle shape without a custom blend circle.
-            // We'll just draw the circle. Alpha effect is achieved by color darkness implicitly on LED matrix.
             color.r = (color.r * (int)(pulse*255)) >> 8;
             color.g = (color.g * (int)(pulse*255)) >> 8;
             color.b = (color.b * (int)(pulse*255)) >> 8;
             
-            hub75_fill_circle(cx, cy, r, color);
+            drawShape(cx, cy, r, true, pulse, color);
         }
     }
 }
 
 void SuperArtEngine::drawGeometric() {
     int cells = currentAnim.complexity > 5 ? 8 : 4;
-    float cellSize = width / cells;
+    float cellSizeX = (float)width / cells;
+    float cellSizeY = (float)height / cells;
     float a = currentAnim.mathA; float b = currentAnim.mathB; float c = currentAnim.mathC;
     float chaos = currentAnim.chaos * 0.5f;
     for (int cy = 0; cy < cells; cy++) {
         for (int cx = 0; cx < cells; cx++) {
             float n = fastSin(cx * a + cy * b + time * c) + ((random(0,100)/100.0f)*chaos);
             rgb_t col = getColor(fabs(n) * 255.0f);
-            hub75_fill_circle(cx*cellSize + cellSize/2, cy*cellSize + cellSize/2, fmax(1, cellSize/2), col);
+            drawShape(cx*cellSizeX + cellSizeX/2.0f, cy*cellSizeY + cellSizeY/2.0f, fmax(1.0f, fmin(cellSizeX, cellSizeY)/2.0f), true, 1.0f, col);
         }
     }
 }
 
 void SuperArtEngine::drawSquiggle() {
+    float scaleX = (float)width / V_WIDTH;
+    float scaleY = (float)height / V_HEIGHT;
     float a = currentAnim.mathA; float b = currentAnim.mathB; float c = currentAnim.mathC;
     float amp = currentAnim.mathD * 10;
     float freq = currentAnim.mathE;
     float chaos = currentAnim.chaos;
-    for (int yOffset = 0; yOffset < height; yOffset += 20) {
-        rgb_t col = getColor((float)yOffset / height * 255.0f);
+    
+    for (int yOffset = 0; yOffset < V_HEIGHT; yOffset += 20) {
+        rgb_t col = getColor((float)yOffset / V_HEIGHT * 255.0f);
         float px = 0, py = yOffset + fastSin(time * b) * (amp * c) + ((random(0,100)/100.0f)*chaos);
-        for (int x = 10; x <= width; x += 10) {
+        for (int x = 10; x <= V_WIDTH; x += 10) {
             float y = yOffset + fastSin(x * 0.05f * a * freq + time * b) * (amp * c) + ((random(0,100)/100.0f)*chaos);
-            hub75_draw_line(px, py, x, y, col);
+            drawThinLine(px * scaleX, py * scaleY, x * scaleX, y * scaleY, col);
             px = x; py = y;
         }
     }
@@ -638,76 +767,88 @@ void SuperArtEngine::drawSquiggle() {
 
 void SuperArtEngine::drawMolnar() {
     int cols = fmax(2, floor(16 * currentAnim.mathA));
-    float cellW = width / cols; float cellH = height / cols;
+    float cellW = (float)width / cols; 
+    float cellH = (float)height / cols;
     for (int i = 0; i < cols; i++) {
         for (int j = 0; j < cols; j++) {
             rgb_t col = getColor((i*j)*10);
-            float size = fmax(1, cellW * 0.8f * fmax(0.1f, currentAnim.mathC));
-            // Just drawing rectangles since no rotation native primitives
-            hub75_draw_rect(i*cellW + cellW/2 - size/2, j*cellH + cellH/2 - size/2, size, size, col);
+            float size = fmax(1.0f, cellW * 0.8f * fmax(0.1f, currentAnim.mathC));
+            hub75_draw_rect(i*cellW + cellW/2.0f - size/2.0f, j*cellH + cellH/2.0f - size/2.0f, size, size, col);
         }
     }
 }
 
 void SuperArtEngine::drawNake() {
-    float len = 50 * currentAnim.mathA;
+    float scale = fmin((float)width/V_WIDTH, (float)height/V_HEIGHT);
+    float len = 50 * currentAnim.mathA * scale;
     float chaos = currentAnim.mathB + currentAnim.chaos * 0.1f;
     int num = floor(currentAnim.density / 2);
     for (int i = 0; i < num; i++) {
         float x1 = (fastSin(time + i) * 0.5f + 0.5f) * width;
         float y1 = (fastCos(time + i*chaos) * 0.5f + 0.5f) * height;
         rgb_t col = getColor(i % 256);
-        hub75_draw_circle(x1, y1, fmax(1, len/4), col);
+        drawShape(x1, y1, fmax(1.0f, len/4.0f), false, 1.0f, col);
     }
 }
 
 void SuperArtEngine::drawNees() {
+    float scaleX = (float)width / V_WIDTH;
+    float scaleY = (float)height / V_HEIGHT;
     int cols = 10;
-    float cellW = width / cols; float cellH = height / cols;
+    float cellW = (float)width / cols; 
+    float cellH = (float)height / cols;
     for (int i = 0; i < cols; i++) {
         for (int j = 0; j < cols; j++) {
-            float dx = ((random(0,100)/100.0f)-0.5f) * j * currentAnim.mathA * (1+currentAnim.chaos*0.1f);
-            float dy = ((random(0,100)/100.0f)-0.5f) * j * currentAnim.mathB * (1+currentAnim.chaos*0.1f);
+            float dx = ((random(0,100)/100.0f)-0.5f) * j * currentAnim.mathA * (1+currentAnim.chaos*0.1f) * scaleX;
+            float dy = ((random(0,100)/100.0f)-0.5f) * j * currentAnim.mathB * (1+currentAnim.chaos*0.1f) * scaleY;
             rgb_t col = getColor(j*25);
-            hub75_draw_circle(i*cellW + dx + cellW/2, j*cellH + dy + cellH/2, fmax(1, (cellW-4)/2 * fmax(0.1f, currentAnim.mathC)), col);
+            drawShape(i*cellW + dx + cellW/2.0f, j*cellH + dy + cellH/2.0f, fmax(1.0f, (cellW-4.0f*scaleX)/2.0f * fmax(0.1f, currentAnim.mathC)), false, 1.0f, col);
         }
     }
 }
 
 void SuperArtEngine::drawLeWitt() {
+    float scaleX = (float)width / V_WIDTH;
+    float scaleY = (float)height / V_HEIGHT;
     std::vector<std::pair<float, float>> pts;
     float seed = currentAnim.mathC;
     for (int i = 0; i < 50; i++) {
         float x = (fastSin(i*seed + time*0.1f)*0.5f+0.5f) * width * currentAnim.mathD;
         float y = (fastCos(i*seed + time*0.1f)*0.5f+0.5f) * height * currentAnim.mathE;
-        x += ((random(0,100)/100.0f)-0.5f) * currentAnim.chaos * 10;
-        y += ((random(0,100)/100.0f)-0.5f) * currentAnim.chaos * 10;
+        x += ((random(0,100)/100.0f)-0.5f) * currentAnim.chaos * 10 * scaleX;
+        y += ((random(0,100)/100.0f)-0.5f) * currentAnim.chaos * 10 * scaleY;
         pts.push_back({x, y});
     }
     for (size_t i = 0; i < pts.size() - 1; i++) {
         rgb_t col = getColor(i * 5);
-        hub75_draw_line(pts[i].first, pts[i].second, pts[i+1].first, pts[i+1].second, col);
+        drawThinLine(pts[i].first, pts[i].second, pts[i+1].first, pts[i+1].second, col);
     }
 }
 
 void SuperArtEngine::drawFidenza() {
+    float scaleX = (float)width / V_WIDTH;
+    float scaleY = (float)height / V_HEIGHT;
+    float scale = fmin(scaleX, scaleY);
     for (auto& p : particles) {
         rgb_t col = getColor(p.colorIdx);
-        float baseW = currentAnim.mathC * 5;
-        float varW = fastSin(p.x * 0.05f)*4 * currentAnim.mathD;
-        float w = fmax(1, baseW + varW);
-        hub75_fill_circle(p.x, p.y, w, col);
+        float baseW = currentAnim.mathC * 5 * scale;
+        float varW = fastSin(p.x * 0.05f)*4 * currentAnim.mathD * scale;
+        float w = baseW + varW;
+        drawShape(p.x * scaleX, p.y * scaleY, w, true, 1.0f, col);
     }
 }
 
 void SuperArtEngine::drawRingers() {
+    float scaleX = (float)width / V_WIDTH;
+    float scaleY = (float)height / V_HEIGHT;
+    float scale = fmin(scaleX, scaleY);
     for (auto& p : pegs) {
         rgb_t col = getColor(0);
-        hub75_fill_circle(p.x, p.y, fmax(1, 4 * currentAnim.mathD), col);
+        hub75_fill_circle(p.x * scaleX, p.y * scaleY, fmax(1.0f, 4 * currentAnim.mathD * scale), col);
     }
     rgb_t col = getColor(128);
     bool first = true;
-    float chaosOff = currentAnim.chaos * 2;
+    float chaosOff = currentAnim.chaos * 2; 
     float px = 0, py = 0;
     for (auto& p : pegs) {
         if (p.active) {
@@ -717,7 +858,7 @@ void SuperArtEngine::drawRingers() {
                 px = p.x+ox; py = p.y+oy;
                 first = false;
             } else {
-                hub75_draw_line(px, py, p.x+ox, p.y+oy, col);
+                drawThinLine(px * scaleX, py * scaleY, (p.x+ox) * scaleX, (p.y+oy) * scaleY, col);
                 px = p.x+ox; py = p.y+oy;
             }
         }
@@ -726,28 +867,30 @@ void SuperArtEngine::drawRingers() {
 
 void SuperArtEngine::drawAutoglyphs() {
     int cols = fmax(8, floor(16 * currentAnim.mathA));
-    float cellW = width / cols; float cellH = height / cols;
+    float cellW = (float)width / cols; 
+    float cellH = (float)height / cols;
     for (int i = 0; i < cols; i++) {
         for (int j = 0; j < cols; j++) {
             float v = fastSin(i * j * currentAnim.mathB);
             if ((random(0,100)/100.0f) < currentAnim.chaos * 0.05f) v *= -1;
             rgb_t col = getColor((i+j)*10);
             if (v > 0.5f * currentAnim.mathC) {
-                hub75_draw_line(i*cellW, j*cellH, (i+1)*cellW, (j+1)*cellH, col);
+                drawThinLine(i*cellW, j*cellH, (i+1)*cellW, (j+1)*cellH, col);
             } else if (v < -0.5f * currentAnim.mathC) {
-                hub75_draw_line((i+1)*cellW, j*cellH, i*cellW, (j+1)*cellH, col);
+                drawThinLine((i+1)*cellW, j*cellH, i*cellW, (j+1)*cellH, col);
             } else {
-                hub75_draw_line(i*cellW + cellW/2, j*cellH, i*cellW + cellW/2, (j+1)*cellH, col);
+                drawThinLine(i*cellW + cellW/2.0f, j*cellH, i*cellW + cellW/2.0f, (j+1)*cellH, col);
             }
         }
     }
 }
 
 void SuperArtEngine::drawArchetype() {
+    float scaleX = (float)width / V_WIDTH;
     float divX = width * (0.3f + fastSin(time)*0.2f * currentAnim.mathA);
     float divY = height * (0.5f + fastCos(time)*0.3f);
-    float pad = currentAnim.mathD * 10;
-    float gap = currentAnim.mathE * 5;
+    float pad = currentAnim.mathD * 10 * scaleX;
+    float gap = currentAnim.mathE * 5 * scaleX;
     hub75_fill_rect(pad, pad, divX-gap, divY-gap, getColor(50));
     hub75_fill_rect(divX+gap, pad, width-divX-pad-gap, divY-gap, getColor(100));
     hub75_fill_rect(pad, divY+gap, divX-gap, height-divY-pad-gap, getColor(150));
@@ -756,45 +899,52 @@ void SuperArtEngine::drawArchetype() {
 
 void SuperArtEngine::drawPassersby() {
     drawNeuralMorph();
-    // simulate shadow hole
     float focus = currentAnim.mathB;
     rgb_t dark = {0,0,0};
-    hub75_fill_circle(width/2, height/2, (width/2.5f) * focus, dark); // fake alpha with black
+    hub75_fill_circle(width/2.0f, height/2.0f, (width/2.5f) * focus, dark); 
 }
 
 void SuperArtEngine::drawAnadol() {
+    float scaleX = (float)width / V_WIDTH;
+    float scaleY = (float)height / V_HEIGHT;
+    float scale = fmin(scaleX, scaleY);
     for (auto& p : particles) {
-        float rad = fmax(1, (10 + fastSin(p.x * 0.05f + time)*5) * currentAnim.mathC);
+        float rad = fmax(1.0f, (10 + fastSin(p.x * 0.05f + time)*5) * currentAnim.mathC * scale);
         rgb_t c = getColor(p.colorIdx);
-        // fake alpha
         c.r = (c.r * (int)(0.3f * currentAnim.mathD * 255)) >> 8;
         c.g = (c.g * (int)(0.3f * currentAnim.mathD * 255)) >> 8;
         c.b = (c.b * (int)(0.3f * currentAnim.mathD * 255)) >> 8;
-        hub75_fill_circle(p.x, p.y, rad, c);
+        drawShape(p.x * scaleX, p.y * scaleY, rad, true, 0.3f * currentAnim.mathD, c);
     }
 }
 
 void SuperArtEngine::drawLearningToSee() {
-    float a = currentAnim.mathA;
+    float scaleX = (float)width / V_WIDTH;
+    float scaleY = (float)height / V_HEIGHT;
+    float scale = fmin(scaleX, scaleY);
     for (auto& p : particles) {
-        float r = fmax(1, fastSin(p.x*0.1f + p.y*0.1f + time) > (0.5f * currentAnim.mathD) ? 5 : 1);
+        float r = fmax(1.0f, fastSin(p.x*0.1f + p.y*0.1f + time) > (0.5f * currentAnim.mathD) ? 5 * scale : 1 * scale);
         rgb_t c = getColor(p.colorIdx);
-        hub75_fill_rect(p.x, p.y, r, r, c);
+        hub75_fill_rect(p.x * scaleX, p.y * scaleY, r, r, c);
     }
 }
 
 void SuperArtEngine::drawAvidLines() {
+    float scaleX = (float)width / V_WIDTH;
+    float scaleY = (float)height / V_HEIGHT;
     int lines = fmax(1, floor(10 * fmax(0.1f, currentAnim.mathA)));
     for (int l = 0; l < lines; l++) {
         rgb_t c = getColor(l * 20);
         float px = 0;
-        float py = ((float)l/lines)*height * currentAnim.mathD + fastSin(0 + l*0.5f + time)*20*currentAnim.mathB;
+        float py = ((float)l/lines)*V_HEIGHT * currentAnim.mathD + fastSin(0 + l*0.5f + time)*20*currentAnim.mathB;
         py += ((random(0,100)/100.0f)-0.5f) * currentAnim.chaos * 2;
-        for (int x = 5; x <= width; x += 5) {
-            float y = ((float)l/lines)*height * currentAnim.mathD + fastSin(x*0.02f + l*0.5f + time)*20*currentAnim.mathB;
+        for (int x = 5; x <= V_WIDTH; x += 5) {
+            float y = ((float)l/lines)*V_HEIGHT * currentAnim.mathD + fastSin(x*0.02f + l*0.5f + time)*20*currentAnim.mathB;
             y += ((random(0,100)/100.0f)-0.5f) * currentAnim.chaos * 2;
-            hub75_draw_line(px, py, x, y, c);
+            drawThinLine(px * scaleX, py * scaleY, x * scaleX, y * scaleY, c);
             px = x; py = y;
         }
     }
 }
+
+ 

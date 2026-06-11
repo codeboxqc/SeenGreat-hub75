@@ -273,18 +273,30 @@ void hub75_draw_hline(int x, int y, int width, rgb_t color) {
 void hub75_draw_vline(int x, int y, int height, rgb_t color) {
     for (int i = 0; i < height; i++) hub75_set_pixel(x, y + i, color);
 }
+inline float fpart(float x) {
+    return x - floor(x);
+}
+
+inline float rfpart(float x) {
+    return 1.0f - fpart(x);
+}
+
+ 
 void hub75_draw_line(int x0, int y0, int x1, int y1, rgb_t color) {
     int dx = abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
-    int dy = abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
-    int err = dx - dy;
-    while (1) {
+    int dy = -abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    int err = dx + dy, e2;
+
+    while (true) {
         hub75_set_pixel(x0, y0, color);
         if (x0 == x1 && y0 == y1) break;
-        int e2 = 2 * err;
-        if (e2 > -dy) { err -= dy; x0 += sx; }
-        if (e2 < dx)  { err += dx; y0 += sy; }
+        e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x0 += sx; }
+        if (e2 <= dx) { err += dx; y0 += sy; }
     }
 }
+
+
 void hub75_draw_rect(int x, int y, int width, int height, rgb_t color) {
     hub75_draw_hline(x, y, width, color);
     hub75_draw_hline(x, y + height - 1, width, color);
@@ -310,8 +322,12 @@ void hub75_fill_rect(int x, int y, int width, int height, rgb_t color) {
         }
     }
 }
+
 void hub75_draw_circle(int cx, int cy, int radius, rgb_t color) {
-    int x = radius, y = 0, err = 0;
+    int x = radius;
+    int y = 0;
+    int err = 0;
+
     while (x >= y) {
         hub75_set_pixel(cx + x, cy + y, color);
         hub75_set_pixel(cx + y, cy + x, color);
@@ -321,19 +337,41 @@ void hub75_draw_circle(int cx, int cy, int radius, rgb_t color) {
         hub75_set_pixel(cx - y, cy - x, color);
         hub75_set_pixel(cx + y, cy - x, color);
         hub75_set_pixel(cx + x, cy - y, color);
-        y++;
-        if (err <= 0) err += 2 * y + 1;
-        if (err > 0) { x--; err -= 2 * x + 1; }
-    }
-}
-void hub75_fill_circle(int cx, int cy, int radius, rgb_t color) {
-    for (int dy = -radius; dy <= radius; dy++) {
-        for (int dx = -radius; dx <= radius; dx++) {
-            if (dx * dx + dy * dy <= radius * radius)
-                hub75_set_pixel(cx + dx, cy + dy, color);
+
+        if (err <= 0) {
+            y += 1;
+            err += 2*y + 1;
+        }
+        if (err > 0) {
+            x -= 1;
+            err -= 2*x + 1;
         }
     }
 }
+
+ void hub75_fill_circle(int cx, int cy, int radius, rgb_t color) {
+    int x = radius;
+    int y = 0;
+    int err = 0;
+
+    while (x >= y) {
+        hub75_draw_hline(cx - x, cy + y, x * 2 + 1, color);
+        hub75_draw_hline(cx - y, cy + x, y * 2 + 1, color);
+        hub75_draw_hline(cx - x, cy - y, x * 2 + 1, color);
+        hub75_draw_hline(cx - y, cy - x, y * 2 + 1, color);
+
+        if (err <= 0) {
+            y += 1;
+            err += 2*y + 1;
+        }
+        if (err > 0) {
+            x -= 1;
+            err -= 2*x + 1;
+        }
+    }
+}
+
+
 void hub75_draw_triangle(int x0, int y0, int x1, int y1, int x2, int y2, rgb_t color) {
     hub75_draw_line(x0, y0, x1, y1, color);
     hub75_draw_line(x1, y1, x2, y2, color);
