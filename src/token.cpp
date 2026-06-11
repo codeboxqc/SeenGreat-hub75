@@ -2,6 +2,7 @@
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 #include "engine.h"
+#include "hub75_driver.h"
 
 extern SuperArtEngine* engine;
 extern unsigned long animationStartTime;
@@ -37,9 +38,16 @@ const char* defaultJsonConfig = R"=====(
 int numTokens = 0;
 String tokenFiles[256];
 
+bool isTransitioning = false;
+unsigned long transitionStartTime = 0;
+const unsigned long transitionDuration = 10000; // 10 seconds total
+const unsigned long fadeOutDuration = 5000; // 5 seconds fade out
+bool tokenSwitchedDuringTransition = false;
+
 void loadRandomToken() {
     if (numTokens == 0) {
         ArtConfig config = parseConfig(defaultJsonConfig);
+        config.playDuration = 10;
         engine->loadConfig(config);
         animationStartTime = millis();
         return;
@@ -78,20 +86,54 @@ void token_init() {
         }
     }
 
-    Serial.print("token ");
-    Serial.println(numTokens);
-    for (int i = 0; i < numTokens; ++i) {
-        Serial.print(i + 1);
-        Serial.print(" ");
+    if (numTokens == 0) {
+        Serial.println("token 0 10 second start");
+    } else {
+        Serial.print("token ");
+        Serial.println(numTokens);
+        for (int i = 0; i < numTokens; ++i) {
+            Serial.print(i + 1);
+            Serial.print(" ");
+        }
+        Serial.println();
     }
-    Serial.println();
 
     loadRandomToken();
 }
 
 void token_update() {
-    if (millis() - animationStartTime > engine->getCurrentAnim().playDuration * 1000UL) {
-        Serial.println("Animation playDuration reached. Loading random token.");
-        loadRandomToken();
+    if (isTransitioning) {
+        unsigned long elapsed = millis() - transitionStartTime;
+        if (elapsed < fadeOutDuration) {
+            // Fade out
+            float progress = (float)elapsed / fadeOutDuration;
+            uint8_t brightness = 200 - (uint8_t)(progress * 200.0f);
+            hub75_set_brightness(brightness);
+        } else if (elapsed < transitionDuration) {
+            // Switch token if we haven't already
+            if (!tokenSwitchedDuringTransition) {
+                loadRandomToken();
+                // Override animationStartTime so that the new token's duration
+                // begins ticking exactly when the full transition is over
+                animationStartTime = transitionStartTime + transitionDuration;
+                tokenSwitchedDuringTransition = true;
+            }
+            // Fade in
+            float progress = (float)(elapsed - fadeOutDuration) / fadeOutDuration;
+            uint8_t brightness = (uint8_t)(progress * 200.0f);
+            hub75_set_brightness(brightness);
+        } else {
+            // End transition
+            isTransitioning = false;
+            hub75_set_brightness(200);
+        }
+    } else {
+        // Normal playback checking
+        if (millis() - animationStartTime > engine->getCurrentAnim().playDuration * 1000UL) {
+            Serial.println("Animation playDuration reached. Starting 10 second transition.");
+            isTransitioning = true;
+            transitionStartTime = millis();
+            tokenSwitchedDuringTransition = false;
+        }
     }
 }
