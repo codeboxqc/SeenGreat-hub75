@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 #include "engine.h"
 #include "hub75_driver.h"
+#include "config.h"
 
 extern SuperArtEngine* engine;
 extern unsigned long animationStartTime;
@@ -94,6 +95,13 @@ void token_init() {
         for (int i = 0; i < numTokens; ++i) {
             Serial.print("token ");
             Serial.println(i + 1);
+
+            // Draw visual loading progress bar on the LED matrix
+            hub75_clear();
+            int progressWidth = ((i + 1) * TOTAL_WIDTH) / numTokens;
+            hub75_fill_rect(0, TOTAL_HEIGHT / 2 - 2, progressWidth, 4, {0, 255, 0});
+            hub75_swap_buffers();
+
             delay(1000); // 1-second delay exactly as requested
         }
     }
