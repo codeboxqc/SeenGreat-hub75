@@ -108,25 +108,27 @@ void SuperArtEngine::initPalettes() {
 }
 
 float SuperArtEngine::fastSin(float x) {
-    float t = fmod(x, M_PI * 2.0f);
-    if (t < 0) t += M_PI * 2.0f;
-    int index = floor((t / (M_PI * 2.0f)) * LUT_SIZE);
-    if (index >= LUT_SIZE) index = 0;
+    const float LUT_SCALE = LUT_SIZE / (M_PI * 2.0f);
+    int index = (int)(x * LUT_SCALE) % LUT_SIZE;
+    if (index < 0) index += LUT_SIZE;
     return sinLUT[index];
 }
 
 float SuperArtEngine::fastCos(float x) {
-    float t = fmod(x, M_PI * 2.0f);
-    if (t < 0) t += M_PI * 2.0f;
-    int index = floor((t / (M_PI * 2.0f)) * LUT_SIZE);
-    if (index >= LUT_SIZE) index = 0;
+    const float LUT_SCALE = LUT_SIZE / (M_PI * 2.0f);
+    int index = (int)(x * LUT_SCALE) % LUT_SIZE;
+    if (index < 0) index += LUT_SIZE;
     return cosLUT[index];
 }
 
 float SuperArtEngine::fastHypot(float dx, float dy) {
     float ax = fabs(dx);
     float ay = fabs(dy);
-    return fmax(ax, ay) + 0.4f * fmin(ax, ay);
+    if (ax > ay) {
+        return ax + 0.4f * ay;
+    } else {
+        return ay + 0.4f * ax;
+    }
 }
 
 rgb_t SuperArtEngine::getColor(float index) {
@@ -353,25 +355,30 @@ void SuperArtEngine::drawShape(float x, float y, float size, bool fill, float al
     int mod = shapeID / 10;
     float s = size * (currentAnim.mathD * 0.2f + 0.8f);
 
-    // Sub-pixel or exactly 1 pixel fallback for fine dust
-    if (s <= 0.6f) {
+    // Perfect 1:4 aspect scale resolution mapping
+    // Sub-pixel or exact 1 pixel fallback for fine dust (below 1 scaled pixel)
+    if (s <= 0.5f) {
         hub75_set_pixel(x, y, c);
         return;
     }
 
-    int radius = round(s);
+    int radius = (int)(s + 0.5f);
     if (radius < 1) radius = 1;
 
     if (fill) {
         if (cat == 0 || cat == 3 || cat == 4 || cat == 7) {
             if (radius == 1) {
-                // To keep small shapes looking sharp instead of turning into 3x3 circles
-                hub75_fill_rect(x, y, 2, 2, c);
+                // True 1x1 pixel mapping instead of forcing 2x2 blocks for thin points
+                hub75_set_pixel(x, y, c);
             } else {
                 hub75_fill_circle(x, y, radius, c);
             }
         } else if (cat == 1) {
-            hub75_fill_rect(x - radius, y - radius, radius * 2, radius * (mod > 5 ? 1 : 2), c);
+            if (radius == 1) {
+                hub75_set_pixel(x, y, c);
+            } else {
+                hub75_fill_rect(x - radius, y - radius, radius * 2, radius * (mod > 5 ? 1 : 2), c);
+            }
         } else if (cat == 2) {
             drawThinLine(x, y - radius, x + radius, y + radius, c);
             drawThinLine(x + radius, y + radius, x - radius, y + radius, c);
@@ -386,27 +393,31 @@ void SuperArtEngine::drawShape(float x, float y, float size, bool fill, float al
             drawThinLine(x - radius, y, x + radius, y, c);
             drawThinLine(x, y - radius, x, y + radius, c);
         } else {
-            if (radius == 1) hub75_fill_rect(x, y, 2, 2, c);
+            if (radius == 1) hub75_set_pixel(x, y, c);
             else hub75_fill_circle(x, y, radius, c);
         }
     } else {
         if (cat == 0 || cat == 3 || cat == 4 || cat == 7) {
-            if (radius == 1) hub75_draw_rect(x, y, 2, 2, c);
+            if (radius == 1) hub75_set_pixel(x, y, c);
             else hub75_draw_circle(x, y, radius, c);
         } else if (cat == 1) {
-            hub75_draw_rect(x - radius, y - radius, radius * 2, radius * (mod > 5 ? 1 : 2), c);
+            if (radius == 1) hub75_set_pixel(x, y, c);
+            else hub75_draw_rect(x - radius, y - radius, radius * 2, radius * (mod > 5 ? 1 : 2), c);
         } else if (cat == 2) {
             drawThinLine(x, y - radius, x + radius, y + radius, c);
             drawThinLine(x + radius, y + radius, x - radius, y + radius, c);
             drawThinLine(x - radius, y + radius, x, y - radius, c);
         } else if (cat == 5) {
-            hub75_draw_circle(x, y, radius, c);
-            if (radius > 1) hub75_draw_circle(x, y, radius/2, c);
+            if (radius == 1) hub75_set_pixel(x, y, c);
+            else {
+                hub75_draw_circle(x, y, radius, c);
+                if (radius > 1) hub75_draw_circle(x, y, radius/2, c);
+            }
         } else if (cat == 6) {
             drawThinLine(x - radius, y, x + radius, y, c);
             drawThinLine(x, y - radius, x, y + radius, c);
         } else {
-            if (radius == 1) hub75_draw_rect(x, y, 2, 2, c);
+            if (radius == 1) hub75_set_pixel(x, y, c);
             else hub75_draw_circle(x, y, radius, c);
         }
     }

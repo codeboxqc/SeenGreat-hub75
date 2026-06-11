@@ -92,10 +92,10 @@ void token_init() {
         Serial.print("token ");
         Serial.println(numTokens);
         for (int i = 0; i < numTokens; ++i) {
-            Serial.print(i + 1);
-            Serial.print(" ");
+            Serial.print("token ");
+            Serial.println(i + 1);
+            delay(1000);
         }
-        Serial.println();
     }
 
     loadRandomToken();
