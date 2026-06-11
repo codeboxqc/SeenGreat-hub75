@@ -273,16 +273,70 @@ void hub75_draw_hline(int x, int y, int width, rgb_t color) {
 void hub75_draw_vline(int x, int y, int height, rgb_t color) {
     for (int i = 0; i < height; i++) hub75_set_pixel(x, y + i, color);
 }
+inline float fpart(float x) {
+    return x - floor(x);
+}
+
+inline float rfpart(float x) {
+    return 1.0f - fpart(x);
+}
+
 void hub75_draw_line(int x0, int y0, int x1, int y1, rgb_t color) {
-    int dx = abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
-    int dy = abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
-    int err = dx - dy;
-    while (1) {
-        hub75_set_pixel(x0, y0, color);
-        if (x0 == x1 && y0 == y1) break;
-        int e2 = 2 * err;
-        if (e2 > -dy) { err -= dy; x0 += sx; }
-        if (e2 < dx)  { err += dx; y0 += sy; }
+    bool steep = abs(y1 - y0) > abs(x1 - x0);
+    if (steep) {
+        int tmp = x0; x0 = y0; y0 = tmp;
+        tmp = x1; x1 = y1; y1 = tmp;
+    }
+    if (x0 > x1) {
+        int tmp = x0; x0 = x1; x1 = tmp;
+        tmp = y0; y0 = y1; y1 = tmp;
+    }
+
+    float dx = x1 - x0;
+    float dy = y1 - y0;
+    float gradient = dx == 0.0f ? 1.0f : dy / dx;
+
+    int xend = round(x0);
+    float yend = y0 + gradient * (xend - x0);
+    float xgap = rfpart(x0 + 0.5f);
+    int xpxl1 = xend;
+    int ypxl1 = floor(yend);
+
+    if (steep) {
+        hub75_blend_pixel(ypxl1, xpxl1, color, rfpart(yend) * xgap * 255);
+        hub75_blend_pixel(ypxl1 + 1, xpxl1, color, fpart(yend) * xgap * 255);
+    } else {
+        hub75_blend_pixel(xpxl1, ypxl1, color, rfpart(yend) * xgap * 255);
+        hub75_blend_pixel(xpxl1, ypxl1 + 1, color, fpart(yend) * xgap * 255);
+    }
+    float intery = yend + gradient;
+
+    xend = round(x1);
+    yend = y1 + gradient * (xend - x1);
+    xgap = fpart(x1 + 0.5f);
+    int xpxl2 = xend;
+    int ypxl2 = floor(yend);
+
+    if (steep) {
+        hub75_blend_pixel(ypxl2, xpxl2, color, rfpart(yend) * xgap * 255);
+        hub75_blend_pixel(ypxl2 + 1, xpxl2, color, fpart(yend) * xgap * 255);
+    } else {
+        hub75_blend_pixel(xpxl2, ypxl2, color, rfpart(yend) * xgap * 255);
+        hub75_blend_pixel(xpxl2, ypxl2 + 1, color, fpart(yend) * xgap * 255);
+    }
+
+    if (steep) {
+        for (int x = xpxl1 + 1; x <= xpxl2 - 1; x++) {
+            hub75_blend_pixel(floor(intery), x, color, rfpart(intery) * 255);
+            hub75_blend_pixel(floor(intery) + 1, x, color, fpart(intery) * 255);
+            intery = intery + gradient;
+        }
+    } else {
+        for (int x = xpxl1 + 1; x <= xpxl2 - 1; x++) {
+            hub75_blend_pixel(x, floor(intery), color, rfpart(intery) * 255);
+            hub75_blend_pixel(x, floor(intery) + 1, color, fpart(intery) * 255);
+            intery = intery + gradient;
+        }
     }
 }
 void hub75_draw_rect(int x, int y, int width, int height, rgb_t color) {
@@ -311,26 +365,27 @@ void hub75_fill_rect(int x, int y, int width, int height, rgb_t color) {
     }
 }
 void hub75_draw_circle(int cx, int cy, int radius, rgb_t color) {
-    int x = radius, y = 0, err = 0;
-    while (x >= y) {
-        hub75_set_pixel(cx + x, cy + y, color);
-        hub75_set_pixel(cx + y, cy + x, color);
-        hub75_set_pixel(cx - y, cy + x, color);
-        hub75_set_pixel(cx - x, cy + y, color);
-        hub75_set_pixel(cx - x, cy - y, color);
-        hub75_set_pixel(cx - y, cy - x, color);
-        hub75_set_pixel(cx + y, cy - x, color);
-        hub75_set_pixel(cx + x, cy - y, color);
-        y++;
-        if (err <= 0) err += 2 * y + 1;
-        if (err > 0) { x--; err -= 2 * x + 1; }
+    for (int dy = -radius - 1; dy <= radius + 1; dy++) {
+        for (int dx = -radius - 1; dx <= radius + 1; dx++) {
+            float dist = sqrt(dx*dx + dy*dy);
+            float diff = fabs(dist - radius);
+            if (diff <= 1.0f) {
+                float alpha = 1.0f - diff;
+                hub75_blend_pixel(cx + dx, cy + dy, color, alpha * 255);
+            }
+        }
     }
 }
 void hub75_fill_circle(int cx, int cy, int radius, rgb_t color) {
-    for (int dy = -radius; dy <= radius; dy++) {
-        for (int dx = -radius; dx <= radius; dx++) {
-            if (dx * dx + dy * dy <= radius * radius)
+    for (int dy = -radius - 1; dy <= radius + 1; dy++) {
+        for (int dx = -radius - 1; dx <= radius + 1; dx++) {
+            float dist = sqrt(dx*dx + dy*dy);
+            if (dist <= radius) {
                 hub75_set_pixel(cx + dx, cy + dy, color);
+            } else if (dist <= radius + 1.0f) {
+                float alpha = 1.0f - (dist - radius);
+                hub75_blend_pixel(cx + dx, cy + dy, color, alpha * 255);
+            }
         }
     }
 }
@@ -506,7 +561,7 @@ void hub75_draw_sprite(int x, int y, const uint16_t *bitmap, int w, int h, uint1
     }
 }
 
- 
+
 
 // ==================== Scrolling ====================
 void hub75_scroll(int dx, int dy) {
@@ -532,13 +587,13 @@ void hub75_scroll(int dx, int dy) {
 }
 
 // ==================== Dithering ====================
- 
+
 static bool dithering_enabled = false;
 void hub75_enable_dithering(bool enable) { dithering_enabled = enable; }
- 
+
 
 // ==================== Colour Cycling (Hue Shift) ====================
- 
+
 static uint16_t global_hue_shift = 0;
 void hub75_set_hue_shift(uint16_t shift) { global_hue_shift = shift % 360; }
 static rgb_t apply_hue_shift(rgb_t c) {
@@ -557,14 +612,14 @@ static rgb_t apply_hue_shift(rgb_t c) {
     hue = (hue + global_hue_shift) % 360;
     return hsv_to_rgb(hue, sat, val);
 }
- 
+
 
 // ==================== Brightness ====================
 void hub75_set_brightness(uint8_t b) { brightness = b; }
 
 // ==================== Optimised Refresh (8‑bit, register writes, loop unrolled) ====================
 // OE times in microseconds – tuned for a typical 64×64 panel at 300 MHz
-//static const uint16_t oe_time[] = {2, 4, 8, 16}; 
+//static const uint16_t oe_time[] = {2, 4, 8, 16};
 static const uint16_t oe_time[] = {2, 4, 6, 10, 18, 30, 50, 80};
 
 void hub75_refresh(void) {
