@@ -85,7 +85,7 @@ private:
     void resetState();
     void generateLSystem(int iters);
 
-    void drawShape(float x, float y, float size, bool fill, float alpha = 1.0f);
+    void drawShape(float x, float y, float size, bool fill, float alpha, rgb_t c);
     void drawShapeInner(float s, int cat, int mod, bool fill);
     
     void updateGameOfLife();
