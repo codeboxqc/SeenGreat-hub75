@@ -207,7 +207,7 @@ void SuperArtEngine::generateLSystem(int iters) {
 }
 
 void SuperArtEngine::update() {
-    float timeMod = (currentAnim.bpm / 60.0f) * currentAnim.speed * 0.05f;
+    float timeMod = (currentAnim.bpm / 60.0f) * currentAnim.speed * 0.025f;
     time += timeMod;
     frameCounter++;
     

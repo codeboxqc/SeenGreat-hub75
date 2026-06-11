@@ -30,6 +30,7 @@ static uint8_t *draw_buffer = framebuffer_a;
 static uint8_t *display_buffer = framebuffer_b;
 
 static uint8_t brightness = DEFAULT_BRIGHTNESS;
+static uint8_t brightnessLUT[256];
 int camera_x = 0, camera_y = 0;
 
 // ==================== Gamma LUT (2.2) ====================
@@ -193,6 +194,9 @@ static inline void latch_data() {
 
 // ==================== System Init ====================
 void hub75_init(void) {
+    // Initialize brightness LUT default
+    hub75_set_brightness(DEFAULT_BRIGHTNESS);
+
     // Overclock to 300 MHz (RP2350 / Pico 2 safe)
     set_sys_clock_khz(300000, true);
 
@@ -219,13 +223,6 @@ void hub75_init(void) {
 
 void hub75_set_camera(int x, int y) { camera_x = x; camera_y = y; }
 void hub75_clear(void) { memset(draw_buffer, 0, FB_SIZE); }
-
-// ==================== Pre‑scale Brightness on Display Buffer ====================
-static void pre_scale_brightness(void) {
-    for (int i = 0; i < FB_SIZE; i++) {
-        display_buffer[i] = (display_buffer[i] * brightness) >> 8;
-    }
-}
 
 // ==================== Core Drawing (with clipping) ====================
 void hub75_fill(rgb_t color) {
@@ -598,7 +595,12 @@ static rgb_t apply_hue_shift(rgb_t c) {
  
 
 // ==================== Brightness ====================
-void hub75_set_brightness(uint8_t b) { brightness = b; }
+void hub75_set_brightness(uint8_t b) {
+    brightness = b;
+    for (int i = 0; i < 256; i++) {
+        brightnessLUT[i] = (i * b) >> 8;
+    }
+}
 
 // ==================== Optimised Refresh (8‑bit, register writes, loop unrolled) ====================
 // OE times in microseconds – tuned for a typical 64×64 panel at 300 MHz
@@ -617,13 +619,13 @@ void hub75_refresh(void) {
                     int idx_top = (row * TOTAL_WIDTH + (x + k)) * 3;
                     int idx_bot = ((row + half) * TOTAL_WIDTH + (x + k)) * 3;
 
-                    // Values already gamma‑corrected and brightness‑scaled
-                    uint8_t r1 = display_buffer[idx_top + 0];
-                    uint8_t g1 = display_buffer[idx_top + 1];
-                    uint8_t b1 = display_buffer[idx_top + 2];
-                    uint8_t r2 = display_buffer[idx_bot + 0];
-                    uint8_t g2 = display_buffer[idx_bot + 1];
-                    uint8_t b2 = display_buffer[idx_bot + 2];
+                    // Values apply brightness scaling dynamically via LUT
+                    uint8_t r1 = brightnessLUT[display_buffer[idx_top + 0]];
+                    uint8_t g1 = brightnessLUT[display_buffer[idx_top + 1]];
+                    uint8_t b1 = brightnessLUT[display_buffer[idx_top + 2]];
+                    uint8_t r2 = brightnessLUT[display_buffer[idx_bot + 0]];
+                    uint8_t g2 = brightnessLUT[display_buffer[idx_bot + 1]];
+                    uint8_t b2 = brightnessLUT[display_buffer[idx_bot + 2]];
 
                     uint32_t out = 0;
                     if ((r1 >> bit) & 1) out |= R1_MASK;
@@ -656,8 +658,6 @@ void hub75_swap_buffers(void) {
     uint8_t *temp = draw_buffer;
     draw_buffer = display_buffer;
     display_buffer = temp;
-    // After swapping, pre‑scale brightness (and optionally gamma) on the new display buffer
-    pre_scale_brightness();
 }
 
 // ==================== HSV Helper ====================

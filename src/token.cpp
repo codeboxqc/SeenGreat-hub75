@@ -94,7 +94,7 @@ void token_init() {
         for (int i = 0; i < numTokens; ++i) {
             Serial.print("token ");
             Serial.println(i + 1);
-            delay(50);
+            delay(1000); // 1-second delay exactly as requested
         }
     }
 
