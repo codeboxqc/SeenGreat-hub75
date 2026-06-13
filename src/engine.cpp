@@ -145,11 +145,9 @@ rgb_t SuperArtEngine::getColor(float index) {
 
 
 
- 
-
 void SuperArtEngine::resetState() {
-    particles.clear();
-    grid.clear();
+    particleCount = 0; // Fix 6: clear fixed array
+    gridCols = 0; gridRows = 0; // Fix 7: reset flat grid
     pegs.clear();
     time = 0;
     frameCounter = 0;
@@ -160,10 +158,11 @@ void SuperArtEngine::resetState() {
     // the same every boot instead of randomising from micros().
     randomSeed(currentAnim.id * 12345UL);
 
-    // Fix #12: precompute Passersby vignette mask once per config load.
+    particleCount = 0; // Fix 6: reset fixed-array count
+
+    // Precompute Passersby vignette mask once per config load.
     // drawPassersby was doing 4096 sqrt-equivalent checks every frame — now it's a bool lookup.
     {
-        vignetteOutside.resize(width * height);
         float cx = width / 2.0f;
         float cy = height / 2.0f;
         float focus = currentAnim.mathB;
@@ -196,23 +195,51 @@ void SuperArtEngine::resetState() {
             p.vy = (random(0, 200) / 100.0f - 1.0f) * 2.0f;
             p.life = random(0, 100);
             p.colorIdx = random(0, 256);
-            particles.push_back(p);
+            if (particleCount < MAX_PARTICLES) particles[particleCount++] = p; // Fix 6
         }
     } else if (algo == 0 || algo == 6 || algo == 10 || algo == 12 || algo == 14 || algo == 15 || algo == 18 || algo == 19 || algo == 23) {
         // Fix #8: cap grid so each cell is at least 2px — sqrt(density) at density=650
         // gives 25 cols on a 64px display (2.5px/cell). Cap at width/2 to keep ≥2px cells.
         int cols = (int)fmax(4.0f, sqrt((float)density));
         cols = (cols < width / 2) ? cols : (width / 2);
-        int rows = cols;
-        grid.resize(cols);
+        cols = cols < MAX_GRID_COLS ? cols : MAX_GRID_COLS; // Fix 7: clamp to static size
+        int rows = cols < MAX_GRID_ROWS ? cols : MAX_GRID_ROWS;
+        gridCols = cols; gridRows = rows;
+        // Fix 7: flat 1D init — single-index access, no inner-vector allocation
         for (int i = 0; i < cols; i++) {
-            grid[i].resize(rows);
             for (int j = 0; j < rows; j++) {
-                grid[i][j] = random(0, 100) > 50 ? 1 : 0;
+                grid[i * rows + j] = random(0, 100) > 50 ? 1 : 0;
             }
         }
     } else if (algo == 4) {
         generateLSystem(fmax(1, ((int)currentAnim.mathC % 4) + 2));
+        // Fix 8: pre-bake segment list from the L-system string.
+        // angleStep here uses mathA and mathE with time=0; time-animated params
+        // (chaos, sin(time*0.5)*mathE) are applied as a delta at draw time.
+        {
+            lSystemSegCount = 0;
+            float scaleY = (float)height / V_HEIGHT;
+            float len = 5 * currentAnim.mathB * scaleY;
+            float cx = width / 2.0f, cy = height;
+            float ang = -M_PI / 2.0f;
+            float angStep = currentAnim.mathA * M_PI; // base; sin(time) delta added at draw
+            int cIdx = 0;
+            // Simple stack using fixed arrays (no heap)
+            static float stackAng[64]; static float stackX[64]; static float stackY[64];
+            int sp = 0;
+            for (size_t k = 0; k < lSystemString.length() && lSystemSegCount < MAX_LSEG; k++) {
+                char ch = lSystemString[k];
+                if (ch == 'F') {
+                    float nx = cx + cos(ang) * len;
+                    float ny = cy + sin(ang) * len;
+                    lSystemSegments[lSystemSegCount++] = {cx, cy, nx, ny, cIdx++};
+                    cx = nx; cy = ny;
+                } else if (ch == '+') { ang += angStep; }
+                else if (ch == '-') { ang -= angStep; }
+                else if (ch == '[' && sp < 64) { stackAng[sp]=ang; stackX[sp]=cx; stackY[sp]=cy; sp++; }
+                else if (ch == ']' && sp > 0)  { --sp; ang=stackAng[sp]; cx=stackX[sp]; cy=stackY[sp]; }
+            }
+        }
     } else if (algo == 17) {
         int cols = fmax(3, sqrt(density / 10));
         for (int i = 1; i <= cols; i++) {
@@ -225,9 +252,9 @@ void SuperArtEngine::resetState() {
             }
         }
     }
-}
 
-
+    precompute(); // derive all per-config constants once
+} 
 
 
 
