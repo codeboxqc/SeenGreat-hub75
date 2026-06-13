@@ -300,6 +300,32 @@ void SuperArtEngine::precompute() {
     pc.ringersChaos  = currentAnim.chaos * 2.0f;
 }
 
+// Smoothly mutate continuous parameters from current state toward `target`.
+// t = 0.0 → no change, t = 1.0 → fully at target.
+// Particles, time, RNG, algo, palette, symmetry are NOT touched.
+void SuperArtEngine::morphParams(const ArtConfig& target, float t) {
+    // Smoothstep easing: feels organic, not mechanical
+    float s = t * t * (3.0f - 2.0f * t);
+
+    #define LERP(field) currentAnim.field = currentAnim.field + (target.field - currentAnim.field) * s
+    LERP(colorSpeed);
+    LERP(chaos);
+    LERP(speed);
+    LERP(density);   // density drives particle count but won't respawn during morph
+    LERP(complexity);
+    LERP(trailFade);
+    LERP(mathA);
+    LERP(mathB);
+    LERP(mathC);
+    LERP(mathD);
+    LERP(mathE);
+    LERP(mathF);
+    #undef LERP
+
+    // Refresh derived cache so the running draw code picks up the new values
+    precompute();
+}
+
 void SuperArtEngine::generateLSystem(int iters) {
     String axiom = "F";
     String rule = "F[+F]F[-F]F";
