@@ -275,11 +275,16 @@ class SuperArtEngine {
         let algo = this.currentAnim.algo;
         let density = Math.max(10, this.currentAnim.density);
         
+        // PARITY FIX B: C++ initialises all particle positions in V_WIDTH=256 virtual space.
+        // JS must do the same so that physics runs in the same numeric range.
+        // drawParticles/drawSubstrate/etc. then scale to canvas coords at draw time (like C++).
+        const V = 256; // virtual coordinate space — matches C++ V_WIDTH / V_HEIGHT
+        
         if ([2, 5, 7, 11, 13, 16, 20, 21, 22, 24].includes(algo)) {
             for (let i = 0; i < density; i++) {
                 this.particles.push({
-                    x: Math.random() * this.width,
-                    y: Math.random() * this.height,
+                    x: Math.random() * V,   // virtual space, NOT canvas pixels
+                    y: Math.random() * V,
                     vx: (Math.random() - 0.5) * 2,
                     vy: (Math.random() - 0.5) * 2,
                     life: Math.random() * 100,
@@ -591,20 +596,25 @@ class SuperArtEngine {
             p.vx = this.fastCos(angle) * this.currentAnim.speed * this.currentAnim.mathC + (Math.random()*this.currentAnim.chaos - this.currentAnim.chaos/2)*0.1;
             p.vy = this.fastSin(angle) * this.currentAnim.speed * this.currentAnim.mathE + (Math.random()*this.currentAnim.chaos - this.currentAnim.chaos/2)*0.1;
             p.x += p.vx; p.y += p.vy;
-            if (Math.random() < seedChance) { p.x = Math.random() * this.width; p.y = Math.random() * this.height; }
+            // PARITY FIX A: advance colorIdx each frame to match C++ engine ("Fix #2")
+            p.colorIdx = (p.colorIdx + 1) % 256;
+            // PARITY FIX B: respawn in virtual 0-256 space
+            if (Math.random() < seedChance) { p.x = Math.random() * 256; p.y = Math.random() * 256; }
         }
     }
     drawSubstrate() {
+        // PARITY FIX B: particles live in 0-256 virtual space; scale to canvas
+        const scaleX = this.width / 256, scaleY = this.height / 256;
         for (let p of this.particles) {
             this.ctx.fillStyle = this.getColor(p.colorIdx);
-            this.ctx.fillRect(p.x, p.y, 2, 2);
+            this.ctx.fillRect(p.x * scaleX, p.y * scaleY, 2, 2);
         }
         for (let i = 0; i < this.particles.length; i+=10) {
             let p1 = this.particles[i]; let p2 = this.particles[(i+1)%this.particles.length];
             let dist = this.fastHypot(p1.x-p2.x, p1.y-p2.y);
             if (dist < 30 * this.currentAnim.mathC) {
                 this.ctx.strokeStyle = this.getColor(p1.colorIdx);
-                this.ctx.beginPath(); this.ctx.moveTo(p1.x, p1.y); this.ctx.lineTo(p2.x, p2.y); this.ctx.stroke();
+                this.ctx.beginPath(); this.ctx.moveTo(p1.x * scaleX, p1.y * scaleY); this.ctx.lineTo(p2.x * scaleX, p2.y * scaleY); this.ctx.stroke();
             }
         }
     }
@@ -683,12 +693,16 @@ class SuperArtEngine {
             } else if (pt === 2) { 
                 p.vy += 0.1 * this.currentAnim.speed; 
                 p.vx += (Math.random()-0.5) * chaos * 0.1;
-                if (p.y > this.height) { p.vy *= -0.8; p.y = this.height; }
+                // PARITY FIX B: bounce against virtual height 256, not canvas height
+                if (p.y > 256) { p.vy *= -0.8; p.y = 256; }
             }
             
             p.x += p.vx; p.y += p.vy;
-            if (p.x < 0) p.x = this.width; if (p.x > this.width) p.x = 0;
-            if (p.y < 0) p.y = this.height; if (p.y > this.height) p.y = 0;
+            // PARITY FIX B: wrap in virtual 0-256 space (matches C++ V_WIDTH/V_HEIGHT)
+            if (p.x < 0) p.x += 256; if (p.x > 256) p.x -= 256;
+            if (p.y < 0) p.y += 256; if (p.y > 256) p.y -= 256;
+            // PARITY FIX A: advance colorIdx each frame to match C++ engine ("Fix #2")
+            p.colorIdx = (p.colorIdx + 1) % 256;
         }
     }
     
@@ -741,15 +755,21 @@ class SuperArtEngine {
             }
             
             p.x += p.vx; p.y += p.vy;
-            if (p.x < 0) p.x = this.width; if (p.x > this.width) p.x = 0;
-            if (p.y < 0) p.y = this.height; if (p.y > this.height) p.y = 0;
+            // PARITY FIX B: wrap in virtual 0-256 space (matches C++ V_WIDTH/V_HEIGHT)
+            if (p.x < 0) p.x += 256; if (p.x > 256) p.x -= 256;
+            if (p.y < 0) p.y += 256; if (p.y > 256) p.y -= 256;
+            // PARITY FIX A: advance colorIdx each frame to match C++ engine ("Fix #2")
+            p.colorIdx = (p.colorIdx + 1) % 256;
         }
     }
 
     drawParticles() {
+        // PARITY FIX B: particles live in 0-256 virtual space; scale to canvas
+        const scaleX = this.width / 256, scaleY = this.height / 256;
+        const scale  = Math.min(scaleX, scaleY);
         for (let p of this.particles) {
             this.ctx.fillStyle = this.getColor(p.colorIdx);
-            this.drawShape(p.x, p.y, 2, 'fill');
+            this.drawShape(p.x * scaleX, p.y * scaleY, 2 * scale, 'fill');
         }
     }
 
@@ -769,11 +789,14 @@ class SuperArtEngine {
 
     updateNeuralMorph() { this.updateFlowFields(); }
     drawNeuralMorph() {
+        // PARITY FIX B: particles live in 0-256 virtual space; scale to canvas
+        const scaleX = this.width / 256, scaleY = this.height / 256;
+        const scale  = Math.min(scaleX, scaleY);
         let a = this.currentAnim.mathA; let b = this.currentAnim.mathB;
         for (let p of this.particles) {
             this.ctx.fillStyle = this.getColor(p.colorIdx);
-            let s = Math.max(0.5, Math.abs(this.fastSin(this.time + p.x)*5*this.currentAnim.mathE) + this.currentAnim.mathD);
-            this.ctx.beginPath(); this.ctx.arc(p.x, p.y, s, 0, Math.PI * 2); this.ctx.fill();
+            let s = Math.max(0.5, Math.abs(this.fastSin(this.time + p.x)*5*this.currentAnim.mathE) + this.currentAnim.mathD) * scale;
+            this.ctx.beginPath(); this.ctx.arc(p.x * scaleX, p.y * scaleY, s, 0, Math.PI * 2); this.ctx.fill();
         }
         let maxDist = 50 * a * b;
         for(let i=0; i<this.particles.length; i++) {
@@ -783,7 +806,7 @@ class SuperArtEngine {
                 if(d < maxDist) {
                     this.ctx.strokeStyle = this.getColor(p1.colorIdx);
                     this.ctx.globalAlpha = 1.0 - (d/maxDist);
-                    this.ctx.beginPath(); this.ctx.moveTo(p1.x, p1.y); this.ctx.lineTo(p2.x, p2.y); this.ctx.stroke();
+                    this.ctx.beginPath(); this.ctx.moveTo(p1.x * scaleX, p1.y * scaleY); this.ctx.lineTo(p2.x * scaleX, p2.y * scaleY); this.ctx.stroke();
                 }
             }
         }
@@ -913,12 +936,15 @@ class SuperArtEngine {
     }
 
     drawFidenza() {
+        // PARITY FIX B: particles live in 0-256 virtual space; scale to canvas
+        const scaleX = this.width / 256, scaleY = this.height / 256;
+        const scale  = Math.min(scaleX, scaleY);
         for (let p of this.particles) {
             this.ctx.fillStyle = this.getColor(p.colorIdx);
-            let baseW = this.currentAnim.mathC * 5;
-            let varW = this.fastSin(p.x * 0.05)*4 * this.currentAnim.mathD;
-            let width = Math.max(1, baseW + varW);
-            this.drawShape(p.x, p.y, width, 'fill');
+            let baseW = this.currentAnim.mathC * 5 * scale;
+            let varW = this.fastSin(p.x * 0.05)*4 * this.currentAnim.mathD * scale;
+            let width = Math.max(scale, baseW + varW);
+            this.drawShape(p.x * scaleX, p.y * scaleY, width, 'fill');
         }
     }
 
@@ -962,10 +988,14 @@ class SuperArtEngine {
     }
 
     drawArchetype() {
+        // PARITY FIX D: C++ scales pad/gap by scaleX and works in screen pixels.
+        // JS simulator runs at canvas size (=screen size), so scaleX = width/256.
+        // To match C++: pad = mathD*10*(width/256), gap = mathE*5*(width/256)
+        let scaleX = this.width / 256;
         let divX = this.width * (0.3 + this.fastSin(this.time)*0.2 * this.currentAnim.mathA);
         let divY = this.height * (0.5 + this.fastCos(this.time)*0.3);
-        let pad = this.currentAnim.mathD * 10;
-        let gap = this.currentAnim.mathE * 5;
+        let pad = this.currentAnim.mathD * 10 * scaleX;
+        let gap = this.currentAnim.mathE * 5 * scaleX;
         this.ctx.fillStyle = this.getColor(50); this.ctx.fillRect(pad, pad, divX-gap, divY-gap);
         this.ctx.fillStyle = this.getColor(100); this.ctx.fillRect(divX+gap, pad, this.width-divX-pad-gap, divY-gap);
         this.ctx.fillStyle = this.getColor(150); this.ctx.fillRect(pad, divY+gap, divX-gap, this.height-divY-pad-gap);
@@ -974,28 +1004,47 @@ class SuperArtEngine {
 
     drawPassersby() {
         this.drawNeuralMorph();
-        this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        // PARITY FIX C: match C++ engine which halves pixel brightness outside the radius
+        // (C++: pixel >>= 1 for vignetteOutside pixels).
+        // JS canvas has no per-pixel read-back in a tight loop, so we approximate with
+        // a radial gradient overlay at 50% opacity — same visual darkening, same edge.
         let focus = this.currentAnim.mathB;
-        this.ctx.beginPath(); this.ctx.arc(this.width/2, this.height/2, (this.width/2.5) * focus, 0, Math.PI*2); 
-        this.ctx.rect(this.width, 0, -this.width, this.height); this.ctx.fill();
+        let r = (this.width / 2.5) * focus;
+        let cx = this.width / 2, cy = this.height / 2;
+        let grad = this.ctx.createRadialGradient(cx, cy, r * 0.95, cx, cy, r * 1.05);
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(1, 'rgba(0,0,0,0.5)');
+        // Fill entire canvas with the gradient, then cover outside solidly
+        this.ctx.save();
+        this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        this.ctx.rect(this.width, 0, -this.width, this.height);
+        this.ctx.fill();
+        this.ctx.restore();
     }
 
     drawAnadol() {
+        // PARITY FIX B: particles live in 0-256 virtual space; scale to canvas
+        const scaleX = this.width / 256, scaleY = this.height / 256;
+        const scale  = Math.min(scaleX, scaleY);
         for (let p of this.particles) {
-            let rad = Math.max(1, (10 + this.fastSin(p.x * 0.05 + this.time)*5) * this.currentAnim.mathC);
+            let rad = Math.max(scale, (10 + this.fastSin(p.x * 0.05 + this.time)*5) * this.currentAnim.mathC * scale);
             this.ctx.fillStyle = this.getColor(p.colorIdx);
             this.ctx.globalAlpha = 0.3 * this.currentAnim.mathD;
-            this.drawShape(p.x, p.y, rad, 'fill');
+            this.drawShape(p.x * scaleX, p.y * scaleY, rad, 'fill');
         }
         this.ctx.globalAlpha = 1.0;
     }
 
     drawLearningToSee() {
-        let a = this.currentAnim.mathA;
+        // PARITY FIX B: particles live in 0-256 virtual space; scale to canvas
+        const scaleX = this.width / 256, scaleY = this.height / 256;
+        const scale  = Math.min(scaleX, scaleY);
         for (let p of this.particles) {
-            let r = Math.max(1, this.fastSin(p.x*0.1 + p.y*0.1 + this.time) > (0.5 * this.currentAnim.mathD) ? 5 : 1);
+            let r = Math.max(1, this.fastSin(p.x*0.1 + p.y*0.1 + this.time) > (0.5 * this.currentAnim.mathD) ? 5 * scale : 1 * scale);
             this.ctx.fillStyle = this.getColor(p.colorIdx);
-            this.ctx.fillRect(p.x, p.y, r, r);
+            this.ctx.fillRect(p.x * scaleX, p.y * scaleY, r, r);
         }
     }
 
