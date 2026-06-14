@@ -349,6 +349,29 @@ void SuperArtEngine::update() {
     time += timeMod;
     frameCounter++;
     
+    // Continously drift math parameters to ensure the animation structure slowly evolves over time
+    // using slow, irrational frequencies so they never sync
+    float driftSpeed = 0.0005f * currentAnim.speed;
+    currentAnim.mathA += fastSin(time * 0.011f) * driftSpeed;
+    currentAnim.mathB += fastCos(time * 0.013f) * driftSpeed;
+    currentAnim.mathC += fastSin(time * 0.017f) * driftSpeed;
+    currentAnim.mathD += fastCos(time * 0.019f) * driftSpeed;
+    currentAnim.mathE += fastSin(time * 0.023f) * driftSpeed;
+    currentAnim.mathF += fastCos(time * 0.029f) * driftSpeed;
+
+    // Keep parameters somewhat bound so they don't explode to infinity over very long runs
+    // Clamp math A, B to roughly [0.1, 2.0]
+    if(currentAnim.mathA > 2.0f) currentAnim.mathA -= 0.01f; if(currentAnim.mathA < 0.1f) currentAnim.mathA += 0.01f;
+    if(currentAnim.mathB > 2.0f) currentAnim.mathB -= 0.01f; if(currentAnim.mathB < 0.1f) currentAnim.mathB += 0.01f;
+    // Clamp math C, D, E, F to roughly [0.1, 10.0]
+    if(currentAnim.mathC > 10.0f) currentAnim.mathC -= 0.05f; if(currentAnim.mathC < 0.1f) currentAnim.mathC += 0.05f;
+    if(currentAnim.mathD > 10.0f) currentAnim.mathD -= 0.05f; if(currentAnim.mathD < 0.1f) currentAnim.mathD += 0.05f;
+    if(currentAnim.mathE > 10.0f) currentAnim.mathE -= 0.05f; if(currentAnim.mathE < 0.1f) currentAnim.mathE += 0.05f;
+    if(currentAnim.mathF > 10.0f) currentAnim.mathF -= 0.05f; if(currentAnim.mathF < 0.1f) currentAnim.mathF += 0.05f;
+
+    // Refresh precomputed cache so drawings pick up the drifted math parameters
+    precompute();
+
     int algo = currentAnim.algo;
     if (algo == 0) updateGameOfLife();
     else if (algo == 2) updateSubstrate();

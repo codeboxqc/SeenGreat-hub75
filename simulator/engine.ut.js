@@ -384,6 +384,26 @@ class SuperArtEngine {
         this.time += timeMod;
         this.frameCounter++;
         
+        // Continously drift math parameters to ensure the animation structure slowly evolves over time
+        // using slow, irrational frequencies so they never sync
+        let driftSpeed = 0.0005 * this.currentAnim.speed;
+        this.currentAnim.mathA += this.fastSin(this.time * 0.011) * driftSpeed;
+        this.currentAnim.mathB += this.fastCos(this.time * 0.013) * driftSpeed;
+        this.currentAnim.mathC += this.fastSin(this.time * 0.017) * driftSpeed;
+        this.currentAnim.mathD += this.fastCos(this.time * 0.019) * driftSpeed;
+        this.currentAnim.mathE += this.fastSin(this.time * 0.023) * driftSpeed;
+        this.currentAnim.mathF += this.fastCos(this.time * 0.029) * driftSpeed;
+
+        // Keep parameters somewhat bound so they don't explode to infinity over very long runs
+        // Clamp math A, B to roughly [0.1, 2.0]
+        if(this.currentAnim.mathA > 2.0) this.currentAnim.mathA -= 0.01; if(this.currentAnim.mathA < 0.1) this.currentAnim.mathA += 0.01;
+        if(this.currentAnim.mathB > 2.0) this.currentAnim.mathB -= 0.01; if(this.currentAnim.mathB < 0.1) this.currentAnim.mathB += 0.01;
+        // Clamp math C, D, E, F to roughly [0.1, 10.0]
+        if(this.currentAnim.mathC > 10.0) this.currentAnim.mathC -= 0.05; if(this.currentAnim.mathC < 0.1) this.currentAnim.mathC += 0.05;
+        if(this.currentAnim.mathD > 10.0) this.currentAnim.mathD -= 0.05; if(this.currentAnim.mathD < 0.1) this.currentAnim.mathD += 0.05;
+        if(this.currentAnim.mathE > 10.0) this.currentAnim.mathE -= 0.05; if(this.currentAnim.mathE < 0.1) this.currentAnim.mathE += 0.05;
+        if(this.currentAnim.mathF > 10.0) this.currentAnim.mathF -= 0.05; if(this.currentAnim.mathF < 0.1) this.currentAnim.mathF += 0.05;
+
         let algo = this.currentAnim.algo;
         if (algo === 0) this.updateGameOfLife();
         else if (algo === 2) this.updateSubstrate();
