@@ -563,9 +563,9 @@ class SuperArtEngine {
 
     drawMandelbrot() {
         let maxIter = Math.floor(10 + this.currentAnim.mathC);
-        let zoom = 1.0 + this.fastSin(this.time * 0.1) * 0.5 + this.currentAnim.mathB;
-        let moveX = this.fastCos(this.time * 0.2) * 0.5 + this.currentAnim.mathD - 5.0;
-        let moveY = this.fastSin(this.time * 0.2) * 0.5 + this.currentAnim.mathE - 5.0;
+        let zoom = 1.0 + this.fastSin(this.time * 0.113) * 0.5 + this.currentAnim.mathB;
+        let moveX = this.fastCos(this.time * 0.227) * 0.5 + this.currentAnim.mathD - 5.0;
+        let moveY = this.fastSin(this.time * 0.193) * 0.5 + this.currentAnim.mathE - 5.0;
         let res = 4;
         let chaos = this.currentAnim.chaos * 0.1;
         for (let x = 0; x < this.width; x+=res) {
@@ -592,7 +592,7 @@ class SuperArtEngine {
         let a = this.currentAnim.mathA; let b = this.currentAnim.mathB;
         let seedChance = 0.01 * this.currentAnim.mathD + (this.currentAnim.chaos * 0.005);
         for (let p of this.particles) {
-            let angle = this.fastSin(p.x * a) * this.fastCos(p.y * b) * Math.PI * 2 + this.time;
+            let angle = this.fastSin(p.x * a + this.time * 0.313) * this.fastCos(p.y * b + this.time * 0.271) * Math.PI * 2 + this.time;
             p.vx = this.fastCos(angle) * this.currentAnim.speed * this.currentAnim.mathC + (Math.random()*this.currentAnim.chaos - this.currentAnim.chaos/2)*0.1;
             p.vy = this.fastSin(angle) * this.currentAnim.speed * this.currentAnim.mathE + (Math.random()*this.currentAnim.chaos - this.currentAnim.chaos/2)*0.1;
             p.x += p.vx; p.y += p.vy;
@@ -632,8 +632,8 @@ class SuperArtEngine {
                 nx = this.fastSin(x*a) - this.fastCos(y*b) + (Math.random()*chaos - chaos/2);
                 ny = this.fastSin(y*a) - this.fastCos(x*b) + (Math.random()*chaos - chaos/2);
             } else if (r < 0.66) {
-                nx = x*this.fastCos(this.time) - y*this.fastSin(this.time) + mC;
-                ny = x*this.fastSin(this.time) + y*this.fastCos(this.time) - mC;
+                nx = x*this.fastCos(this.time * 0.819) - y*this.fastSin(this.time * 0.733) + mC;
+                ny = x*this.fastSin(this.time * 1.117) + y*this.fastCos(this.time * 0.901) - mC;
             } else {
                 nx = x*a - y*a; ny = x*b + y*b;
             }
@@ -658,7 +658,7 @@ class SuperArtEngine {
         this.ctx.save();
         this.ctx.translate(this.width/2, this.height);
         let len = 5 * this.currentAnim.mathB;
-        let angle = this.currentAnim.mathA * Math.PI + this.fastSin(this.time*0.5)*this.currentAnim.mathE + (this.currentAnim.chaos*0.01); 
+        let angle = this.currentAnim.mathA * Math.PI + this.fastSin(this.time*0.513)*this.currentAnim.mathE + (this.currentAnim.chaos*0.01);
         let cIdx = 0;
         this.ctx.lineWidth = this.currentAnim.mathD;
         for (let char of this.lSystemString) {
@@ -681,7 +681,7 @@ class SuperArtEngine {
         let pt = this.currentAnim.particleType % 3;
         
         for (let p of this.particles) {
-            let angle = this.fastSin(p.x * 0.01 * a * c) * this.fastCos(p.y * 0.01 * b * c) * Math.PI * 2 + this.time * this.currentAnim.mathC;
+            let angle = this.fastSin(p.x * 0.01 * a * c + this.time * 0.283) * this.fastCos(p.y * 0.01 * b * c + this.time * 0.359) * Math.PI * 2 + this.time * this.currentAnim.mathC;
             
             if (pt === 0) { 
                 p.vx = this.fastCos(angle) * this.currentAnim.speed + (Math.random()*chaos - chaos/2)*0.2;
@@ -779,8 +779,9 @@ class SuperArtEngine {
         let gridY = Math.max(1, Math.floor(4 * this.currentAnim.mathE));
         let chaos = this.currentAnim.chaos * 0.1;
         for (let y = 0; y < this.height; y += gridY) {
+            let sinY = this.fastSin(y*0.01*b + this.time * 0.881);
             for (let x = 0; x < this.width; x += gridX) {
-                let v = this.fastSin(x*0.01*a + this.time) + this.fastSin(y*0.01*b + this.time) + this.fastSin((x+y)*0.01*c) + (Math.random()*chaos);
+                let v = this.fastSin(x*0.01*a + this.time * 1.113) + sinY + this.fastSin((x+y)*0.01*c + this.time * 0.733) + (Math.random()*chaos);
                 this.ctx.fillStyle = this.getColor((v + 3) / 6 * 255);
                 this.ctx.fillRect(x, y, gridX, gridY);
             }
@@ -795,7 +796,7 @@ class SuperArtEngine {
         let a = this.currentAnim.mathA; let b = this.currentAnim.mathB;
         for (let p of this.particles) {
             this.ctx.fillStyle = this.getColor(p.colorIdx);
-            let s = Math.max(0.5, Math.abs(this.fastSin(this.time + p.x)*5*this.currentAnim.mathE) + this.currentAnim.mathD) * scale;
+            let s = Math.max(0.5, Math.abs(this.fastSin(this.time * 0.911 + p.x)*5*this.currentAnim.mathE) + this.currentAnim.mathD) * scale;
             this.ctx.beginPath(); this.ctx.arc(p.x * scaleX, p.y * scaleY, s, 0, Math.PI * 2); this.ctx.fill();
         }
         let maxDist = 50 * a * b;
@@ -819,7 +820,7 @@ class SuperArtEngine {
         let thresh = this.currentAnim.mathD; let amp = this.currentAnim.mathE;
         for (let x = 0; x < this.width; x += step) {
             for (let y = 0; y < this.height; y += step) {
-                let noise = this.fastSin(x*a + y*b + this.time);
+                let noise = this.fastSin(x*a + y*b + this.time * 0.833);
                 if (noise > this.fastSin(c) * thresh) {
                     this.ctx.strokeStyle = this.getColor((x/this.width)*128 + (y/this.height)*128);
                     this.ctx.strokeRect(x + noise*5*amp, y, Math.max(1, step-2), Math.max(1, step-2));
@@ -832,7 +833,7 @@ class SuperArtEngine {
         let a = this.currentAnim.mathA; let b = this.currentAnim.mathB; let c = this.currentAnim.mathC;
         for(let x=0; x<this.width; x+=10) {
             for(let y=0; y<this.height; y+=10) {
-                let pulse = (this.fastSin(this.time * a + x * 0.05 * b + y * 0.05 * c) + 1) / 2;
+                let pulse = (this.fastSin(this.time * 1.071 * a + x * 0.05 * b + y * 0.05 * c) + 1) / 2;
                 this.ctx.fillStyle = this.getColor(pulse * 255);
                 this.ctx.globalAlpha = pulse;
                 this.drawShape(x+5, y+5, pulse*4 + 1, 'fill');
@@ -848,7 +849,7 @@ class SuperArtEngine {
         let chaos = this.currentAnim.chaos * 0.5;
         for (let cy = 0; cy < cells; cy++) {
             for (let cx = 0; cx < cells; cx++) {
-                let n = this.fastSin(cx * a + cy * b + this.time * c) + (Math.random()*chaos);
+                let n = this.fastSin(cx * a + cy * b + this.time * 0.953 * c) + (Math.random()*chaos);
                 this.ctx.fillStyle = this.getColor(Math.abs(n) * 255);
                 this.drawShape(cx*cellSize + cellSize/2, cy*cellSize + cellSize/2, Math.max(1, cellSize/2), 'fill');
             }
@@ -865,7 +866,7 @@ class SuperArtEngine {
             this.ctx.strokeStyle = this.getColor(yOffset / this.height * 255);
             this.ctx.beginPath();
             for (let x = 0; x <= this.width; x += 10) {
-                let y = yOffset + this.fastSin(x * 0.05 * a * freq + this.time * b) * (amp * c) + (Math.random()*chaos);
+                let y = yOffset + this.fastSin(x * 0.05 * a * freq + this.time * 1.137 * b) * (amp * c) + (Math.random()*chaos);
                 if (x === 0) this.ctx.moveTo(x, y); else this.ctx.lineTo(x, y);
             }
             this.ctx.stroke();
@@ -879,7 +880,7 @@ class SuperArtEngine {
             for(let j=0; j<cols; j++){
                 this.ctx.save();
                 this.ctx.translate(i*cellW + cellW/2, j*cellH + cellH/2);
-                let rot = this.fastSin(this.time + i*this.currentAnim.mathB + j) * Math.PI/4 * this.currentAnim.mathE;
+                let rot = this.fastSin(this.time * 0.877 + i*this.currentAnim.mathB + j) * Math.PI/4 * this.currentAnim.mathE;
                 this.ctx.rotate(rot + (Math.random() * this.currentAnim.chaos * 0.1));
                 this.ctx.strokeStyle = this.getColor((i*j)*10);
                 this.ctx.lineWidth = this.currentAnim.mathD * 5;
@@ -895,8 +896,8 @@ class SuperArtEngine {
         let chaos = this.currentAnim.mathB + this.currentAnim.chaos * 0.1;
         let num = Math.floor(this.currentAnim.density / 2);
         for(let i=0; i<num; i++){
-            let x1 = (this.fastSin(this.time + i) * 0.5 + 0.5) * this.width;
-            let y1 = (this.fastCos(this.time + i*chaos) * 0.5 + 0.5) * this.height;
+            let x1 = (this.fastSin(this.time * 1.151 + i) * 0.5 + 0.5) * this.width;
+            let y1 = (this.fastCos(this.time * 0.883 + i*chaos) * 0.5 + 0.5) * this.height;
             this.ctx.strokeStyle = this.getColor(i % 256);
             this.ctx.fillStyle = this.getColor(i % 256);
             this.drawShape(x1, y1, Math.max(1, len/4), 'stroke');
@@ -920,8 +921,8 @@ class SuperArtEngine {
         let pts = [];
         let seed = this.currentAnim.mathC;
         for(let i=0; i<50; i++){
-            let x = (this.fastSin(i*seed + this.time*0.1)*0.5+0.5) * this.width * this.currentAnim.mathD;
-            let y = (this.fastCos(i*seed + this.time*0.1)*0.5+0.5) * this.height * this.currentAnim.mathE;
+            let x = (this.fastSin(i*seed + this.time*0.113)*0.5+0.5) * this.width * this.currentAnim.mathD;
+            let y = (this.fastCos(i*seed + this.time*0.173)*0.5+0.5) * this.height * this.currentAnim.mathE;
             x += (Math.random()-0.5) * this.currentAnim.chaos * 10;
             y += (Math.random()-0.5) * this.currentAnim.chaos * 10;
             pts.push({x, y});
@@ -992,8 +993,8 @@ class SuperArtEngine {
         // JS simulator runs at canvas size (=screen size), so scaleX = width/256.
         // To match C++: pad = mathD*10*(width/256), gap = mathE*5*(width/256)
         let scaleX = this.width / 256;
-        let divX = this.width * (0.3 + this.fastSin(this.time)*0.2 * this.currentAnim.mathA);
-        let divY = this.height * (0.5 + this.fastCos(this.time)*0.3);
+        let divX = this.width * (0.3 + this.fastSin(this.time * 1.091)*0.2 * this.currentAnim.mathA);
+        let divY = this.height * (0.5 + this.fastCos(this.time * 0.937)*0.3);
         let pad = this.currentAnim.mathD * 10 * scaleX;
         let gap = this.currentAnim.mathE * 5 * scaleX;
         this.ctx.fillStyle = this.getColor(50); this.ctx.fillRect(pad, pad, divX-gap, divY-gap);
@@ -1029,7 +1030,7 @@ class SuperArtEngine {
         const scaleX = this.width / 256, scaleY = this.height / 256;
         const scale  = Math.min(scaleX, scaleY);
         for (let p of this.particles) {
-            let rad = Math.max(scale, (10 + this.fastSin(p.x * 0.05 + this.time)*5) * this.currentAnim.mathC * scale);
+            let rad = Math.max(scale, (10 + this.fastSin(p.x * 0.05 + this.time * 0.853)*5) * this.currentAnim.mathC * scale);
             this.ctx.fillStyle = this.getColor(p.colorIdx);
             this.ctx.globalAlpha = 0.3 * this.currentAnim.mathD;
             this.drawShape(p.x * scaleX, p.y * scaleY, rad, 'fill');
@@ -1042,7 +1043,7 @@ class SuperArtEngine {
         const scaleX = this.width / 256, scaleY = this.height / 256;
         const scale  = Math.min(scaleX, scaleY);
         for (let p of this.particles) {
-            let r = Math.max(1, this.fastSin(p.x*0.1 + p.y*0.1 + this.time) > (0.5 * this.currentAnim.mathD) ? 5 * scale : 1 * scale);
+            let r = Math.max(1, this.fastSin(p.x*0.1 + p.y*0.1 + this.time * 1.151) > (0.5 * this.currentAnim.mathD) ? 5 * scale : 1 * scale);
             this.ctx.fillStyle = this.getColor(p.colorIdx);
             this.ctx.fillRect(p.x * scaleX, p.y * scaleY, r, r);
         }
@@ -1055,7 +1056,7 @@ class SuperArtEngine {
             this.ctx.lineWidth = 1.5;
             this.ctx.beginPath();
             for(let x=0; x<=this.width; x+=5) {
-                let y = (l/lines)*this.height * this.currentAnim.mathD + this.fastSin(x*0.02 + l*0.5 + this.time)*20*this.currentAnim.mathB;
+                let y = (l/lines)*this.height * this.currentAnim.mathD + this.fastSin(x*0.02 + l*0.5 + this.time * 0.947)*20*this.currentAnim.mathB;
                 y += (Math.random()-0.5) * this.currentAnim.chaos * 2;
                 if(x===0) this.ctx.moveTo(x,y); else this.ctx.lineTo(x,y);
             }
