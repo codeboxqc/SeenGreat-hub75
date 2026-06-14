@@ -51,6 +51,10 @@ public:
     
     const ArtConfig& getCurrentAnim() const { return currentAnim; }
 
+    // Mutate only the continuous math/physics parameters and refresh the
+    // precomputed cache (pc).  Particles, time, and RNG state are untouched.
+    void morphParams(const ArtConfig& target, float t);
+
 private:
     int width;
     int height;
